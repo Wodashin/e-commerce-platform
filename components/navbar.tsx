@@ -1,17 +1,56 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase"
+import type { User } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AuthModal } from "@/components/auth-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Search, Menu, X } from "lucide-react"
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Search, Menu, X, User as UserIcon, LogOut, ShoppingBag } from "lucide-react"
 
 export function Navbar() {
+  const supabase = createClient()
+  const router = useRouter()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  // Removed isLoggedIn state - will be managed by Supabase
+  const [user, setUser] = useState<User | null>(null)
+
+  // Efecto para escuchar el estado de la sesión
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+    }
+    
+    getUser()
+
+    // Suscribirse a cambios (login, logout, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      if (_event === 'SIGNED_OUT') {
+        router.refresh()
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [supabase, router])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.refresh()
+  }
 
   return (
     <>
@@ -26,7 +65,7 @@ export function Navbar() {
               <span className="font-bold text-xl hidden sm:block">Marketplace 3D</span>
             </Link>
 
-            {/* Search Bar */}
+            {/* Search Bar - Desktop */}
             <div className="flex-1 max-w-md mx-4 hidden md:block">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -43,10 +82,50 @@ export function Navbar() {
                 <Link href="/categorias">Categorías</Link>
               </Button>
 
-              {/* Unified auth button that opens modal */}
-              <Button variant="ghost" onClick={() => setIsAuthModalOpen(true)}>
-                Iniciar Sesión
-              </Button>
+              {user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.user_metadata?.avatar_url} alt={user.user_metadata?.full_name} />
+                        <AvatarFallback>{user.email?.[0]?.toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name || 'Usuario'}</p>
+                        <p className="text-xs leading-none text-muted-foreground">
+                          {user.email}
+                        </p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/perfil">
+                        <UserIcon className="mr-2 h-4 w-4" />
+                        <span>Mi Perfil</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/subir-producto">
+                        <ShoppingBag className="mr-2 h-4 w-4" />
+                        <span>Vender Producto</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Cerrar Sesión</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button variant="ghost" onClick={() => setIsAuthModalOpen(true)}>
+                  Iniciar Sesión
+                </Button>
+              )}
 
               <ThemeToggle />
             </div>
@@ -78,9 +157,21 @@ export function Navbar() {
                 <Button variant="ghost" className="justify-start" asChild>
                   <Link href="/categorias">Categorías</Link>
                 </Button>
-                <Button variant="ghost" className="justify-start" onClick={() => setIsAuthModalOpen(true)}>
-                  Iniciar Sesión
-                </Button>
+                
+                {user ? (
+                  <>
+                    <Button variant="ghost" className="justify-start font-bold" asChild>
+                      <Link href="/perfil">Mi Perfil ({user.email})</Link>
+                    </Button>
+                    <Button variant="ghost" className="justify-start text-red-500" onClick={handleSignOut}>
+                      Cerrar Sesión
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" className="justify-start" onClick={() => setIsAuthModalOpen(true)}>
+                    Iniciar Sesión
+                  </Button>
+                )}
               </div>
             </div>
           )}
