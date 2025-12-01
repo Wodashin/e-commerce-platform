@@ -22,9 +22,9 @@ export default function SubirProducto() {
     tags: "",
   })
 
-  // Estado dinámico para variantes (Tamaños)
+  // Ahora cada variante tiene dimensiones específicas
   const [variants, setVariants] = useState([
-    { name: "", price: "", quantity: "" }
+    { l: "", w: "", h: "", price: "", quantity: "" }
   ])
 
   // Subir Imágenes a Cloudflare R2
@@ -55,22 +55,19 @@ export default function SubirProducto() {
     }
   }
 
-  // Manejo de Variantes Dinámicas
+  // Manejo de Variantes
   const addVariant = () => {
-    setVariants([...variants, { name: "", price: "", quantity: "" }])
+    setVariants([...variants, { l: "", w: "", h: "", price: "", quantity: "" }])
   }
 
   const removeVariant = (index: number) => {
-    if (variants.length === 1) return // Evitar borrar la última
+    if (variants.length === 1) return
     setVariants(variants.filter((_, i) => i !== index))
   }
 
   const updateVariant = (index: number, field: string, value: string) => {
     const newVariants: any = [...variants]
-    
-    // Validar cantidad máxima 999
     if (field === 'quantity' && Number(value) > 999) return;
-    
     newVariants[index][field] = value
     setVariants(newVariants)
   }
@@ -79,14 +76,7 @@ export default function SubirProducto() {
     e.preventDefault()
 
     if (!formData.name || !formData.category || images.length === 0) {
-      alert("Faltan datos obligatorios (Nombre, Categoría o Imágenes)")
-      return
-    }
-
-    // Filtrar variantes vacías
-    const validVariants = variants.filter(v => v.name && v.price && v.quantity)
-    if (validVariants.length === 0) {
-      alert("Debes agregar al menos una variante con precio y cantidad")
+      alert("Faltan datos obligatorios")
       return
     }
 
@@ -101,8 +91,9 @@ export default function SubirProducto() {
           description: formData.description,
           tags: formData.tags.split(",").map((t) => t.trim()),
           images,
-          sizes: validVariants.map((v) => ({
-            size: v.name, // Aquí guardamos "15x10cm" o lo que escribas
+          // Aquí formateamos las dimensiones para guardarlas en la BD
+          sizes: variants.map((v) => ({
+            size: `${v.l}x${v.w}x${v.h} cm`, // Guardamos el string formateado
             price: Number(v.price),
             quantity: Number(v.quantity),
           })),
@@ -111,7 +102,7 @@ export default function SubirProducto() {
 
       if (response.ok) {
         alert("¡Producto publicado exitosamente!")
-        router.push("/perfil") // Redirigir al perfil para que lo veas
+        router.push("/mis-productos") // Redirigir a la nueva tabla
       }
     } catch (error) {
       alert("Error al subir producto")
@@ -123,157 +114,96 @@ export default function SubirProducto() {
   return (
     <div className="min-h-screen bg-background py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        <Link href="/productos" className="flex items-center gap-2 text-primary mb-6">
-          <ArrowLeft size={20} /> Volver a productos
+        <Link href="/mis-productos" className="flex items-center gap-2 text-primary mb-6">
+          <ArrowLeft size={20} /> Volver a mi inventario
         </Link>
 
         <Card className="p-6">
           <h1 className="text-3xl font-bold mb-8">Publicar Nuevo Producto</h1>
 
           <form onSubmit={handleSubmit} className="space-y-8">
-            {/* 1. Información Básica */}
+            {/* 1. Info Básica (Igual que antes) */}
             <div>
               <h2 className="text-xl font-semibold mb-4">Información Básica</h2>
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="col-span-2 md:col-span-1">
+                <div>
                   <label className="text-sm font-medium mb-2 block">Nombre del Producto *</label>
-                  <input
-                    required
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Ej: Figura Goku SSJ3"
-                    className="w-full px-4 py-2 border rounded-lg bg-background"
-                  />
+                  <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background" placeholder="Ej: Figura Goku" />
                 </div>
-                <div className="col-span-2 md:col-span-1">
+                <div>
                   <label className="text-sm font-medium mb-2 block">Categoría *</label>
-                  <select
-                    required
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg bg-background"
-                  >
+                  <select required value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background">
                     <option value="">Seleccionar...</option>
-                    {CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
+                    {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 </div>
                 <div className="col-span-2">
                   <label className="text-sm font-medium mb-2 block">Descripción</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Detalles del producto, material, acabado..."
-                    rows={3}
-                    className="w-full px-4 py-2 border rounded-lg bg-background"
-                  />
+                  <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background" rows={3} />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-sm font-medium mb-2 block">Etiquetas (separadas por comas)</label>
-                  <input
-                    type="text"
-                    value={formData.tags}
-                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    placeholder="anime, figura, coleccionable"
-                    className="w-full px-4 py-2 border rounded-lg bg-background"
-                  />
+                  <label className="text-sm font-medium mb-2 block">Etiquetas</label>
+                  <input type="text" value={formData.tags} onChange={(e) => setFormData({ ...formData, tags: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background" placeholder="separadas, por, comas" />
                 </div>
               </div>
             </div>
 
-            {/* 2. Imágenes */}
+            {/* 2. Imágenes (Igual que antes) */}
             <div>
-              <h2 className="text-xl font-semibold mb-4">Galería de Imágenes</h2>
-              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:bg-muted/50 transition cursor-pointer relative">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  disabled={uploading}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <div className="flex flex-col items-center gap-2">
-                  <Upload size={32} className="text-muted-foreground" />
-                  <span className="font-medium">Click para subir imágenes</span>
-                  <span className="text-xs text-muted-foreground">Soporta JPG, PNG (Máx 10MB)</span>
-                </div>
+              <h2 className="text-xl font-semibold mb-4">Imágenes</h2>
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center relative hover:bg-muted/50">
+                <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                <div className="flex flex-col items-center"><Upload size={32} className="mb-2" /><span>Subir Imágenes</span></div>
               </div>
-
-              {/* Preview Grid */}
               {images.length > 0 && (
-                <div className="mt-4 grid grid-cols-3 md:grid-cols-5 gap-4">
-                  {images.map((url, index) => (
-                    <div key={index} className="relative group aspect-square bg-muted rounded-lg overflow-hidden border">
-                      <img src={url} alt="preview" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setImages(images.filter((_, i) => i !== index))}
-                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
+                <div className="mt-4 grid grid-cols-4 gap-4">
+                  {images.map((url, i) => (
+                    <div key={i} className="relative aspect-square"><img src={url} className="object-cover w-full h-full rounded-md" /></div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* 3. Variantes y Precios (DINÁMICO) */}
+            {/* 3. Dimensiones y Precios (MODIFICADO) */}
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Variantes y Precios</h2>
-                <Button type="button" variant="outline" size="sm" onClick={addVariant}>
-                  <Plus className="w-4 h-4 mr-2" /> Agregar Variante
-                </Button>
+                <h2 className="text-xl font-semibold">Variantes por Tamaño</h2>
+                <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="w-4 h-4 mr-2" /> Agregar Tamaño</Button>
               </div>
               
               <div className="space-y-3">
                 {variants.map((variant, index) => (
-                  <div key={index} className="flex flex-col md:flex-row gap-3 items-end md:items-center bg-muted/30 p-3 rounded-lg border">
-                    <div className="flex-1 w-full">
-                      <label className="text-xs text-muted-foreground mb-1 block">Nombre / Medidas</label>
-                      <input
-                        type="text"
-                        placeholder="Ej: 15x10 cm"
-                        value={variant.name}
-                        onChange={(e) => updateVariant(index, 'name', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                      />
+                  <div key={index} className="flex flex-col md:flex-row gap-3 items-end bg-muted/30 p-4 rounded-lg border">
+                    {/* Inputs de Dimensiones */}
+                    <div className="flex gap-2 items-end">
+                      <div>
+                        <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Largo (cm)</label>
+                        <input type="number" placeholder="15" value={variant.l} onChange={(e) => updateVariant(index, 'l', e.target.value)} className="w-20 px-2 py-2 border rounded-md text-sm text-center" />
+                      </div>
+                      <span className="mb-3 text-muted-foreground">x</span>
+                      <div>
+                        <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Ancho (cm)</label>
+                        <input type="number" placeholder="10" value={variant.w} onChange={(e) => updateVariant(index, 'w', e.target.value)} className="w-20 px-2 py-2 border rounded-md text-sm text-center" />
+                      </div>
+                      <span className="mb-3 text-muted-foreground">x</span>
+                      <div>
+                        <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Alto (cm)</label>
+                        <input type="number" placeholder="5" value={variant.h} onChange={(e) => updateVariant(index, 'h', e.target.value)} className="w-20 px-2 py-2 border rounded-md text-sm text-center" />
+                      </div>
                     </div>
-                    <div className="w-full md:w-32">
-                      <label className="text-xs text-muted-foreground mb-1 block">Precio (CLP)</label>
-                      <input
-                        type="number"
-                        placeholder="$"
-                        value={variant.price}
-                        onChange={(e) => updateVariant(index, 'price', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                      />
+
+                    {/* Precio y Stock */}
+                    <div className="flex-1 w-full pl-4 border-l">
+                      <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Precio (CLP)</label>
+                      <input type="number" placeholder="$ 5.000" value={variant.price} onChange={(e) => updateVariant(index, 'price', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
                     </div>
-                    <div className="w-full md:w-24">
-                      <label className="text-xs text-muted-foreground mb-1 block">Stock</label>
-                      <input
-                        type="number"
-                        placeholder="Cant."
-                        max="999"
-                        value={variant.quantity}
-                        onChange={(e) => updateVariant(index, 'quantity', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                      />
+                    <div className="w-24">
+                      <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Stock</label>
+                      <input type="number" placeholder="Cant." max="999" value={variant.quantity} onChange={(e) => updateVariant(index, 'quantity', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
                     </div>
+
                     {variants.length > 1 && (
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50 md:mt-5"
-                        onClick={() => removeVariant(index)}
-                      >
-                        <Trash2 size={18} />
-                      </Button>
+                      <Button type="button" variant="ghost" size="icon" className="text-red-500" onClick={() => removeVariant(index)}><Trash2 size={18} /></Button>
                     )}
                   </div>
                 ))}
@@ -281,12 +211,7 @@ export default function SubirProducto() {
             </div>
 
             <div className="flex gap-4 pt-4 border-t">
-              <Button type="submit" disabled={loading} size="lg" className="flex-1">
-                {loading ? "Publicando..." : "Publicar Producto"}
-              </Button>
-              <Button type="button" variant="outline" asChild size="lg">
-                <Link href="/productos">Cancelar</Link>
-              </Button>
+              <Button type="submit" disabled={loading} size="lg" className="flex-1">{loading ? "Publicando..." : "Publicar Producto"}</Button>
             </div>
           </form>
         </Card>
