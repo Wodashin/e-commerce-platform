@@ -272,7 +272,10 @@ export default function VendorRegistration() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
-              {steps[currentStep - 1].icon && <steps[currentStep - 1].icon className="w-5 h-5 mr-2" />}\
+              {(() => {
+                const StepIcon = steps[currentStep - 1]?.icon
+                return StepIcon ? <StepIcon className="w-5 h-5 mr-2" /> : null
+              })()}
               {steps[currentStep - 1].title}
             </CardTitle>
           </CardHeader>

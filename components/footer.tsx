@@ -93,11 +93,20 @@ export function Footer() {
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
                 <Mail className="w-4 h-4" />
-                <span>info@marketplace3d.cl</span>
+                <a href="mailto:ILyon3d@gmail.com" className="hover:text-foreground transition-colors">
+                  ILyon3d@gmail.com
+                </a>
               </div>
               <div className="flex items-center space-x-2">
                 <Phone className="w-4 h-4" />
-                <span>+56 9 1234 5678</span>
+                <a
+                  href="https://wa.me/56948842564"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  +56 9 4884 2564
+                </a>
               </div>
               <div className="flex items-center space-x-2">
                 <MapPin className="w-4 h-4" />
