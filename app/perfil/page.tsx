@@ -2,211 +2,114 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
-import { Loader2, Mail, Calendar, Package, ShoppingCart, Edit, Plus, Store, User, Trash2 } from "lucide-react"
-
-interface Profile {
-  id: string
-  full_name: string
-  email: string
-  avatar_url: string
-  role: string
-  created_at: string
-}
-
-interface Product {
-  id: string
-  name: string
-  price: number
-  images: string[]
-  category: string
-  stock: number
-}
+import { Badge } from "@/components/ui/badge"
+import { Loader2, Mail, Package, Settings, LogOut, User } from "lucide-react"
 
 export default function ProfilePage() {
   const supabase = createClient()
   const router = useRouter()
-  
+  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [products, setProducts] = useState<Product[]>([])
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState("")
 
   useEffect(() => {
-    async function getData() {
+    async function getProfile() {
       const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) {
         router.push("/")
         return
       }
 
-      // Obtener perfil
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (profileData) {
-        setProfile(profileData)
-        setEditName(profileData.full_name || "")
-        
-        // Obtener productos (Ordenados por fecha reciente)
-        const { data: userProducts, error } = await supabase
-          .from('products')
-          .select('*')
-          .eq('seller_id', user.id)
-          .order('created_at', { ascending: false })
-        
-        if (userProducts) {
-          setProducts(userProducts)
-        }
-      }
+      // Intentamos obtener el perfil, si no existe el trigger debería haberlo creado, 
+      // pero por seguridad usamos los datos de autenticación si falla la tabla.
+      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      
+      setProfile(data || {
+        full_name: user.user_metadata?.full_name,
+        email: user.email,
+        avatar_url: user.user_metadata?.avatar_url,
+        role: 'user'
+      })
       setLoading(false)
     }
-
-    getData()
+    getProfile()
   }, [router, supabase])
 
-  const handleDeleteProduct = async (id: string) => {
-    if(!confirm("¿Estás seguro de borrar este producto?")) return;
-
-    const { error } = await supabase.from('products').delete().eq('id', id)
-    
-    if (!error) {
-      setProducts(products.filter(p => p.id !== id))
-      alert("Producto eliminado")
-    }
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push("/")
+    router.refresh()
   }
 
-  const handleUpdateProfile = async () => {
-    if (!profile) return
-    const { error } = await supabase
-      .from('profiles')
-      .update({ full_name: editName })
-      .eq('id', profile.id)
-
-    if (!error) {
-      setProfile({ ...profile, full_name: editName })
-      setIsEditing(false)
-    }
-  }
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>
-  if (!profile) return null
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>
 
   return (
-    <div className="min-h-screen bg-background py-8">
-      <div className="max-w-6xl mx-auto px-4">
-        <Card className="mb-8">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              <Avatar className="w-24 h-24 border-2 border-muted">
-                <AvatarImage src={profile.avatar_url || ""} />
-                <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                  {profile.full_name?.[0]?.toUpperCase() || <User />}
-                </AvatarFallback>
+    <div className="min-h-screen bg-background py-12 px-4">
+      <div className="max-w-3xl mx-auto space-y-8">
+        
+        {/* Tarjeta de Usuario */}
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+              <Avatar className="w-24 h-24 border-2 border-primary/10">
+                <AvatarImage src={profile?.avatar_url} />
+                <AvatarFallback className="text-2xl">{profile?.full_name?.[0] || <User />}</AvatarFallback>
               </Avatar>
-
-              <div className="flex-1 w-full text-center md:text-left">
-                <div className="flex flex-col md:flex-row items-center justify-between mb-2">
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-                      <Button onClick={handleUpdateProfile}>Guardar</Button>
-                    </div>
-                  ) : (
-                    <h1 className="text-3xl font-bold">{profile.full_name}</h1>
-                  )}
-                  {!isEditing && (
-                    <Button variant="outline" onClick={() => setIsEditing(true)} size="sm">
-                      <Edit className="w-4 h-4 mr-2" /> Editar Perfil
-                    </Button>
-                  )}
+              <div className="flex-1 space-y-2">
+                <h1 className="text-3xl font-bold">{profile?.full_name || "Usuario"}</h1>
+                <div className="flex items-center justify-center md:justify-start gap-2 text-muted-foreground">
+                  <Mail className="w-4 h-4" />
+                  <span>{profile?.email}</span>
                 </div>
-                <div className="flex flex-wrap justify-center md:justify-start gap-4 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1"><Mail className="w-4 h-4" /> {profile.email}</span>
-                  <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> Miembro desde {new Date(profile.created_at).toLocaleDateString()}</span>
-                  <Badge>{profile.role === 'vendor' ? "Vendedor" : "Usuario"}</Badge>
-                </div>
+                <Badge variant={profile?.role === 'vendor' ? 'default' : 'secondary'}>
+                  {profile?.role === 'vendor' ? 'Vendedor Verificado' : 'Usuario'}
+                </Badge>
               </div>
+              <Button variant="outline" className="shrink-0" onClick={handleSignOut}>
+                <LogOut className="w-4 h-4 mr-2" /> Cerrar Sesión
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="products" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="products">Mis Productos ({products.length})</TabsTrigger>
-            <TabsTrigger value="sales">Ventas</TabsTrigger>
-            <TabsTrigger value="purchases">Compras</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="products" className="mt-6 space-y-6">
-            <div className="flex justify-end">
-              <Button asChild>
-                <Link href="/subir-producto"><Plus className="w-4 h-4 mr-2" /> Nuevo Producto</Link>
-              </Button>
-            </div>
-
-            {products.length === 0 ? (
-              <div className="text-center py-12 border-2 border-dashed rounded-lg">
-                <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-medium">Aún no tienes productos</h3>
-                <p className="text-muted-foreground mb-4">Sube tu primer diseño 3D ahora</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((product) => (
-                  <Card key={product.id} className="overflow-hidden group">
-                    <div className="relative aspect-video bg-muted">
-                      {product.images?.[0] && (
-                        <Image src={product.images[0]} alt={product.name} fill className="object-cover" />
-                      )}
-                    </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold truncate">{product.name}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">{product.category}</p>
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-green-600">${product.price.toLocaleString()}</span>
-                        <div className="flex gap-2">
-                          <Button size="icon" variant="ghost" asChild>
-                            <Link href={`/producto/${product.id}`}><Edit className="w-4 h-4" /></Link>
-                          </Button>
-                          <Button size="icon" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => handleDeleteProduct(product.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
+        {/* Acciones Principales */}
+        <div className="grid md:grid-cols-2 gap-6">
           
-          <TabsContent value="sales" className="mt-6">
-            <div className="text-center py-12 border rounded-lg bg-muted/20">
-              <Store className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <p>Panel de ventas próximamente</p>
-            </div>
-          </TabsContent>
-          <TabsContent value="purchases" className="mt-6">
-             <div className="text-center py-12 border rounded-lg bg-muted/20">
-              <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <p>Historial de compras próximamente</p>
-            </div>
-          </TabsContent>
-        </Tabs>
+          {/* Tarjeta de Gestión de Productos */}
+          <Card className="hover:border-primary/50 transition-colors cursor-pointer group">
+            <Link href="/mis-productos">
+              <CardContent className="p-8 flex flex-col items-center text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <Package className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-2">Mis Publicaciones</h3>
+                  <p className="text-muted-foreground">Gestiona tu inventario, edita precios y controla el stock de tus productos.</p>
+                </div>
+                <Button className="w-full">Gestionar Inventario</Button>
+              </CardContent>
+            </Link>
+          </Card>
+
+          {/* Tarjeta de Configuración (Placeholder) */}
+          <Card className="hover:border-primary/50 transition-colors group">
+            <CardContent className="p-8 flex flex-col items-center text-center space-y-4 opacity-70">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
+                <Settings className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold mb-2">Configuración de Cuenta</h3>
+                <p className="text-muted-foreground">Datos personales, dirección de envío y métodos de pago.</p>
+              </div>
+              <Button variant="outline" className="w-full" disabled>Próximamente</Button>
+            </CardContent>
+          </Card>
+
+        </div>
       </div>
     </div>
   )
