@@ -1,17 +1,5 @@
-"use client"
-
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-
-const categories = [
-  { name: "Figuras", count: 45, icon: "🎭" },
-  { name: "Hogar", count: 32, icon: "🏠" },
-  { name: "Accesorios", count: 28, icon: "📱" },
-  { name: "Arquitectura", count: 15, icon: "🏗️" },
-  { name: "Juguetes", count: 38, icon: "🧸" },
-  { name: "Arte", count: 22, icon: "🎨" },
-]
 
 export default function HomePage() {
   return (
@@ -30,24 +18,6 @@ export default function HomePage() {
             <Button size="lg" asChild>
               <Link href="/productos">Explorar Productos</Link>
             </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Categories */}
-      <section className="py-16 px-4">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">Categorías Populares</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {categories.map((category) => (
-              <Link key={category.name} href={`/categoria/${category.name.toLowerCase()}`}>
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer text-center p-4">
-                  <div className="text-3xl mb-2">{category.icon}</div>
-                  <h3 className="font-semibold">{category.name}</h3>
-                  <p className="text-sm text-muted-foreground">{category.count} productos</p>
-                </Card>
-              </Link>
-            ))}
           </div>
         </div>
       </section>
