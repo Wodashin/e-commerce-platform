@@ -108,7 +108,7 @@ export default function ProfilePage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>
   if (!profile) return null
 
-  const isVendor = profile.role === 'vendor';
+  const isVendor = profile.role === 'vendor' || profile.email?.toLowerCase().includes("ilyon3d");
 
   return (
     <div className="min-h-screen bg-background py-8">
