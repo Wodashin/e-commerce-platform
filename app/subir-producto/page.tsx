@@ -252,4 +252,4 @@ export default function SubirProducto() {
       </div>
     </div>
   )
-}v
+}
