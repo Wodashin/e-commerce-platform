@@ -29,9 +29,10 @@ export default function InventoryPage() {
       return
     }
 
+    // QUERY CORREGIDA: Hacemos JOIN con product_variants para obtener el stock
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('*, product_variants(*)') // <-- NUEVO: Traemos todas las variantes
       .eq('seller_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -57,6 +58,22 @@ export default function InventoryPage() {
     } else {
       alert("Error al eliminar: " + error.message)
     }
+  }
+
+  // Lógica de cálculo de stock y precio
+  const calculateTotals = (product: any) => {
+    // NUEVA LÓGICA: Sumamos el stock de la tabla product_variants
+    const variants = product.product_variants || [];
+    
+    const totalStock = variants.reduce((acc: number, curr: any) => 
+      acc + (Number(curr.stock_quantity) || 0), 0
+    );
+
+    const minPrice = variants.length > 0 
+      ? Math.min(...variants.map((v: any) => Number(v.unit_price))) 
+      : (product.price || 0);
+
+    return { totalStock, minPrice };
   }
 
   if (loading) {
@@ -116,8 +133,7 @@ export default function InventoryPage() {
                   </TableHeader>
                   <TableBody>
                     {products.map((product) => {
-                      const totalStock = product.sizes ? product.sizes.reduce((acc: number, curr: any) => acc + (Number(curr.quantity) || 0), 0) : 0
-                      const minPrice = product.sizes ? Math.min(...product.sizes.map((s: any) => Number(s.price))) : product.price
+                      const { totalStock, minPrice } = calculateTotals(product);
 
                       return (
                         <TableRow key={product.id}>
@@ -157,7 +173,6 @@ export default function InventoryPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              {/* Botón de Editar ACTIVADO */}
                               <Button variant="ghost" size="icon" className="hover:bg-muted" asChild>
                                 <Link href={`/editar-producto/${product.id}`}>
                                     <Edit className="w-4 h-4" />
