@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react"
 
 export type CartItem = {
   id: string
+  variantId?: string // <--- ¡AQUÍ ESTÁ EL CAMBIO! Nueva propiedad opcional
   name: string
   price: number
   image: string
@@ -52,6 +53,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = (newItem: CartItem) => {
     setItems((prev) => {
+      // Usamos tanto ID de producto como VariantID (o size) para identificar únicos
       const existing = prev.find((i) => i.id === newItem.id && i.size === newItem.size)
       if (existing) {
         return prev.map((i) =>
