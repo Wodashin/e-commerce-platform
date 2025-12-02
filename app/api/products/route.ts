@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from "next/server"
 
-// GET: Obtener todos los productos
+// GET: Obtener todos los productos (se actualiza el SELECT para obtener VARIANTS)
 export async function GET() {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -12,25 +12,26 @@ export async function GET() {
   )
 
   const { data: products, error } = await supabase
+    // NOTA: products(variants(*)) hace el JOIN automáticamente por product_id
     .from('products')
-    .select('*, seller:profiles(full_name, avatar_url)')
+    .select('*, seller:profiles(full_name, avatar_url), product_variants(*)') 
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(products)
 }
 
-// POST: Crear nuevo producto
+// POST: Crear nuevo producto (Ahora solo crea la fila principal)
 export async function POST(request: Request) {
-  return handleProductAction(request, 'create')
+    return handleProductAction(request, 'create')
 }
 
-// PUT: Actualizar producto existente
+// PUT: Actualizar producto existente (Ahora solo actualiza la fila principal)
 export async function PUT(request: Request) {
-  return handleProductAction(request, 'update')
+    return handleProductAction(request, 'update')
 }
 
-// Función auxiliar para manejar Create y Update
+// Función auxiliar para manejar Create y Update (Eliminamos la manipulación de JSONB)
 async function handleProductAction(request: Request, action: 'create' | 'update') {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -51,48 +52,34 @@ async function handleProductAction(request: Request, action: 'create' | 'update'
   try {
     const body = await request.json()
     
-    // Calcular precio principal (el más bajo)
-    let mainPrice = 0;
-    if (body.sizes && Array.isArray(body.sizes) && body.sizes.length > 0) {
-      mainPrice = Math.min(...body.sizes.map((s: any) => Number(s.price) || 0));
-    } else {
-      mainPrice = Number(body.price) || 0; // Fallback si no hay sizes
-    }
+    // Los datos de las variantes (sizes) ya no se procesan aquí
+    const commonData = {
+        name: body.name,
+        category: body.category,
+        description: body.description,
+        price: body.price || 0, // Precio base (se usa para ordenar/filtrar)
+        images: body.images,
+        tags: body.tags,
+    };
 
     let result;
 
     if (action === 'create') {
       const { data, error } = await supabase
         .from('products')
-        .insert([{
-          name: body.name,
-          category: body.category,
-          description: body.description,
-          price: mainPrice,
-          images: body.images,
-          tags: body.tags,
-          sizes: body.sizes,
-          seller_id: user.id
-        }])
-        .select()
+        .insert([{...commonData, seller_id: user.id}])
+        .select('id, name, seller_id') // Necesitamos el ID del producto creado
+        
       if (error) throw error
       result = data[0]
 
     } else {
-      // Update logic
+      // Update logic (PUT)
       if (!body.id) throw new Error("ID de producto requerido para actualizar")
       
       const { data, error } = await supabase
         .from('products')
-        .update({
-          name: body.name,
-          category: body.category,
-          description: body.description,
-          price: mainPrice, // Recalculamos el precio base por si cambiaron los precios de las variantes
-          images: body.images,
-          tags: body.tags,
-          sizes: body.sizes
-        })
+        .update(commonData)
         .eq('id', body.id)
         .eq('seller_id', user.id) // Seguridad extra: solo el dueño puede editar
         .select()
