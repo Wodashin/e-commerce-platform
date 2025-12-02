@@ -65,7 +65,7 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <h2 className="text-xl">Tu carrito está vacío</h2>
         <Button asChild><Link href="/productos">Volver a la tienda</Link></Button>
       </div>
