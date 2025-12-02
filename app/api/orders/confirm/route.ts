@@ -1,5 +1,5 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'; // Importamos el cliente de Admin
-import { createServerClient } from '@supabase/ssr'; // Para compatibilidad con otros archivos
+import { createClient as createAdminClient } from '@supabase/supabase-js'; 
+import { createServerClient } from '@supabase/ssr'; 
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         // 3. Preparar ítems: Limpiamos el string de tamaño del ítem que viene en la orden
         const cleanOrderItems = order.items.map((item: any) => ({
             ...item,
-            size: String(item.size || '').trim() // Aseguramos que sea string y eliminamos espacios
+            size: String(item.size || '').trim() // Resultado limpio de la talla del carrito
         }));
 
         const stockUpdatePromises = [];
@@ -36,34 +36,42 @@ export async function POST(request: Request) {
         for (const item of cleanOrderItems) {
             const purchasedQuantity = Number(item.quantity) || 1;
 
-            // Buscamos la VARIANTE específica por el product_id y size_description
-            // item.id en el carrito es el product_id (asumido del carrito)
-            const { data: variant, error: variantError } = await supabaseAdmin
-                .from('product_variants')
-                .select('*')
-                .eq('product_id', item.id) 
-                .eq('size_description', item.size) // Usamos la talla LIMPIA para el match
-                .single();
+            const { data: product } = await supabaseAdmin.from('products').select('product_variants(*)').eq('id', item.id).single();
             
-            if (variant && !variantError) {
-                const currentQuantity = Number(variant.stock_quantity) || 0;
-                const newQuantity = Math.max(0, currentQuantity - purchasedQuantity);
+            if (product && product.product_variants) {
+                let stockUpdated = false;
 
-                // Generamos la promesa de actualización para la VARIANTE
-                stockUpdatePromises.push(
-                    supabaseAdmin.from('product_variants')
-                        .update({ stock_quantity: newQuantity })
-                        .eq('id', variant.id) // ¡Actualizamos por ID de VARIANTE!
-                );
-                totalItemsProcessed++;
+                const newVariants = product.product_variants.map((v: any) => {
+                    // Limpiamos el string de la DB antes de comparar
+                    const cleanProductSize = String(v.size_description || '').trim();
+
+                    // ¡LA CORRECCIÓN FINAL! Ahora comparamos el string limpio de la DB contra el string limpio de la ORDEN
+                    if (cleanProductSize === item.size) { 
+                        const currentQuantity = Number(v.stock_quantity) || 0;
+                        const newQuantity = Math.max(0, currentQuantity - purchasedQuantity);
+                        
+                        stockUpdated = true;
+                        return { ...v, stock_quantity: newQuantity }
+                    }
+                    return v;
+                });
+
+                if (stockUpdated) { 
+                    totalItemsProcessed++;
+                    stockUpdatePromises.push(
+                        supabaseAdmin.from('product_variants')
+                            .update(newVariants)
+                            .eq('product_id', item.id) 
+                    );
+                }
             }
         }
         
         // 5. Ejecutar todas las actualizaciones de stock
         await Promise.all(stockUpdatePromises);
 
-        // 6. Marcar la orden como pagada (SOLO después de descontar el stock)
-        await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderId);
+        // 6. Marcar la orden como pagada
+        await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderData.id);
 
         return NextResponse.json({ success: true });
 
