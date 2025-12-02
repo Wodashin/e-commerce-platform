@@ -38,10 +38,11 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
     addItem({
       id: product.id, // ID del producto padre
+      variantId: selectedVariant.id, // <--- ¡AQUÍ ESTÁ LA CLAVE! ID único de la variante
       name: product.name,
       price: currentPrice,
       image: images[0],
-      size: selectedVariant.size_description, // Guardamos la descripción de la talla
+      size: selectedVariant.size_description, // Seguimos guardando el texto para mostrarlo al usuario
       quantity: quantity,
       sellerId: product.seller_id
     })
