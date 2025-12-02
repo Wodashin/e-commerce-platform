@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit, Trash2, Plus, Package, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Edit, Trash2, Plus, Package, Loader2 } from "lucide-react"
 
 export default function InventoryPage() {
   const supabase = createClient()
@@ -29,7 +29,6 @@ export default function InventoryPage() {
       return
     }
 
-    // Traemos los productos de este usuario
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -53,7 +52,6 @@ export default function InventoryPage() {
       .eq('id', id)
 
     if (!error) {
-      // Actualizar la lista localmente sin recargar
       setProducts(products.filter(p => p.id !== id))
       alert("Producto eliminado")
     } else {
@@ -118,9 +116,7 @@ export default function InventoryPage() {
                   </TableHeader>
                   <TableBody>
                     {products.map((product) => {
-                      // Calcular stock total sumando variantes
                       const totalStock = product.sizes ? product.sizes.reduce((acc: number, curr: any) => acc + (Number(curr.quantity) || 0), 0) : 0
-                      // Obtener precio más bajo
                       const minPrice = product.sizes ? Math.min(...product.sizes.map((s: any) => Number(s.price))) : product.price
 
                       return (
@@ -161,9 +157,11 @@ export default function InventoryPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              {/* Aquí podríamos poner un link a editar */}
-                              <Button variant="ghost" size="icon" className="hover:bg-muted">
-                                <Edit className="w-4 h-4" />
+                              {/* Botón de Editar ACTIVADO */}
+                              <Button variant="ghost" size="icon" className="hover:bg-muted" asChild>
+                                <Link href={`/editar-producto/${product.id}`}>
+                                    <Edit className="w-4 h-4" />
+                                </Link>
                               </Button>
                               <Button 
                                 variant="ghost" 
