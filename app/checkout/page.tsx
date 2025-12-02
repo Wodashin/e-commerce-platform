@@ -16,8 +16,8 @@ export default function CheckoutPage() {
   const { items, cartTotal } = useCart()
   const [loading, setLoading] = useState(false)
   
-  // Costo de envío fijo (puedes mejorarlo luego con lógica por región)
-  const shippingCost = 3500 
+  // Costo de envío: MODIFICADO A CERO para testear el pago base
+  const shippingCost = 0 // <--- ¡Costo de envío en CERO!
   const totalWithShipping = cartTotal + shippingCost
 
   const [formData, setFormData] = useState({
@@ -42,7 +42,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           items,
           buyerInfo: formData,
-          shippingCost,
+          shippingCost, // Se envía 0
           total: totalWithShipping
         })
       })
@@ -156,7 +156,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Envío</span>
-                  <span>${shippingCost.toLocaleString("es-CL")}</span>
+                  <span className="font-medium text-green-600">{shippingCost === 0 ? "Gratis" : `$${shippingCost.toLocaleString("es-CL")}`}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold pt-2 border-t">
                   <span>Total a Pagar</span>
