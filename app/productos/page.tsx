@@ -1,33 +1,31 @@
-import { headers } from "next/headers"
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import ProductsClientPage from "./products-client-page"
 
-// Esta función se ejecuta en el servidor para obtener los datos
-async function getProducts() {
-  try {
-    // Detectamos el host actual dinámicamente para construir la URL absoluta
-    const headersList = await headers()
-    const host = headersList.get("host") || "localhost:3000"
-    const protocol = host.includes("localhost") ? "http" : "https"
-    
-    // Llamada a tu API interna usando URL absoluta
-    const res = await fetch(`${protocol}://${host}/api/products`, { 
-      cache: 'no-store' // Para asegurar que siempre traiga datos frescos
-    })
-    
-    if (!res.ok) {
-      console.error("Error fetching products:", res.status)
-      return []
-    }
-    
-    return res.json()
-  } catch (error) {
-    console.error("Failed to fetch products:", error)
-    return []
-  }
-}
-
 export default async function ProductsPage() {
-  const products = await getProducts()
+  const cookieStore = await cookies()
+  
+  // Conexión directa en el servidor
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
+  )
+
+  // Consulta directa a la DB (sin pasar por fetch HTTP)
+  const { data: products, error } = await supabase
+    .from('products')
+    .select(`
+      *,
+      seller:profiles(full_name, avatar_url),
+      product_variants(*)
+    `)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error("Error cargando productos:", error.message)
+    // En caso de error, podríamos mostrar un array vacío o manejarlo
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,8 +37,8 @@ export default async function ProductsPage() {
           </div>
         </div>
         
-        {/* Pasamos los datos al componente cliente */}
-        <ProductsClientPage initialProducts={products} />
+        {/* Pasamos los datos obtenidos directamente */}
+        <ProductsClientPage initialProducts={products || []} />
       </div>
     </div>
   )
