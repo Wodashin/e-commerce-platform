@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AuthModal } from "@/components/auth-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { CartSheet } from "@/components/cart-sheet"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -18,7 +19,7 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Menu, X, User as UserIcon, LogOut, ShoppingBag } from "lucide-react"
+import { Search, Menu, X, User as UserIcon, LogOut, ShoppingBag, ShieldCheck } from "lucide-react"
 
 export function Navbar() {
   const supabase = createClient()
@@ -26,19 +27,28 @@ export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
-  // Efecto para escuchar el estado de la sesión
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
+      // Verificar si es el admin específico
+      if (user && user.email?.toLowerCase().includes("ilyon3d")) {
+        setIsAdmin(true)
+      }
     }
     
     getUser()
 
-    // Suscribirse a cambios (login, logout, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (session?.user?.email?.toLowerCase().includes("ilyon3d")) {
+        setIsAdmin(true)
+      } else {
+        setIsAdmin(false)
+      }
+      
       if (_event === 'SIGNED_OUT') {
         router.refresh()
       }
@@ -74,7 +84,7 @@ export function Navbar() {
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-2">
               <Button variant="ghost" asChild>
                 <Link href="/productos">Productos</Link>
               </Button>
@@ -82,10 +92,15 @@ export function Navbar() {
                 <Link href="/categorias">Categorías</Link>
               </Button>
 
+              {/* Botón del Carrito */}
+              <CartSheet />
+
+              <ThemeToggle />
+
               {user ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full ml-2">
                       <Avatar className="h-8 w-8">
                         <AvatarImage src={user.user_metadata?.avatar_url} alt={user.user_metadata?.full_name} />
                         <AvatarFallback>{user.email?.[0]?.toUpperCase()}</AvatarFallback>
@@ -102,6 +117,16 @@ export function Navbar() {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    
+                    {isAdmin && (
+                      <DropdownMenuItem asChild className="text-orange-600 focus:text-orange-700 bg-orange-50 focus:bg-orange-100">
+                        <Link href="/admin">
+                          <ShieldCheck className="mr-2 h-4 w-4" />
+                          <span>Admin Panel</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+
                     <DropdownMenuItem asChild>
                       <Link href="/perfil">
                         <UserIcon className="mr-2 h-4 w-4" />
@@ -122,28 +147,18 @@ export function Navbar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <Button variant="ghost" onClick={() => setIsAuthModalOpen(true)}>
+                <Button variant="default" onClick={() => setIsAuthModalOpen(true)} className="ml-2">
                   Iniciar Sesión
                 </Button>
               )}
-
-              <ThemeToggle />
             </div>
 
             {/* Mobile Menu Button */}
             <div className="md:hidden flex items-center space-x-2">
-              <ThemeToggle />
+              <CartSheet />
               <Button variant="ghost" size="icon" onClick={() => setIsMenuOpen(!isMenuOpen)}>
                 {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </Button>
-            </div>
-          </div>
-
-          {/* Mobile Search */}
-          <div className="md:hidden pb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input placeholder="Buscar productos 3D..." className="pl-10 pr-4" />
             </div>
           </div>
 
@@ -154,14 +169,16 @@ export function Navbar() {
                 <Button variant="ghost" className="justify-start" asChild>
                   <Link href="/productos">Productos</Link>
                 </Button>
-                <Button variant="ghost" className="justify-start" asChild>
-                  <Link href="/categorias">Categorías</Link>
-                </Button>
                 
                 {user ? (
                   <>
+                    {isAdmin && (
+                      <Button variant="ghost" className="justify-start text-orange-600" asChild>
+                        <Link href="/admin">Panel Admin</Link>
+                      </Button>
+                    )}
                     <Button variant="ghost" className="justify-start font-bold" asChild>
-                      <Link href="/perfil">Mi Perfil ({user.email})</Link>
+                      <Link href="/perfil">Mi Perfil</Link>
                     </Button>
                     <Button variant="ghost" className="justify-start text-red-500" onClick={handleSignOut}>
                       Cerrar Sesión
@@ -172,13 +189,16 @@ export function Navbar() {
                     Iniciar Sesión
                   </Button>
                 )}
+                
+                <div className="pt-2 flex justify-start">
+                  <ThemeToggle />
+                </div>
               </div>
             </div>
           )}
         </div>
       </nav>
 
-      {/* Auth Modal */}
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </>
   )
