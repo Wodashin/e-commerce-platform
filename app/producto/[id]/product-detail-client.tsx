@@ -154,4 +154,121 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                     }`}
                   >
                     <div className="font-semibold text-sm">{size.size}</div>
-                    <div className="text-green-600 font-bold mt-
+                    <div className="text-green-600 font-bold mt-1">${Number(size.price).toLocaleString("es-CL")}</div>
+                    <div className="text-xs text-muted-foreground mt-1">Stock: {size.quantity}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cantidad y Botones */}
+          <div className="space-y-4 pt-4 border-t">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <span className="font-medium">Cantidad:</span>
+                    <div className="flex items-center border rounded-md">
+                        <button 
+                            onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                            className="px-3 py-1 hover:bg-muted transition-colors"
+                        >−</button>
+                        <span className="w-8 text-center font-medium">{quantity}</span>
+                        <button 
+                            onClick={() => setQuantity(quantity + 1)}
+                            className="px-3 py-1 hover:bg-muted transition-colors"
+                        >+</button>
+                    </div>
+                </div>
+                <div className="text-right">
+                    <span className="text-sm text-muted-foreground block">Total a pagar</span>
+                    <span className="text-xl font-bold">${totalPrice.toLocaleString("es-CL")}</span>
+                </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                size="lg"
+                className="flex-1 gap-2 text-base"
+                onClick={handleWhatsAppContact}
+                disabled={selectedSize ? Number(selectedSize.quantity) <= 0 : false}
+              >
+                <MessageCircle className="w-5 h-5" />
+                Comprar por WhatsApp
+              </Button>
+              <Button variant="outline" size="lg" onClick={() => setIsLiked(!isLiked)}>
+                <Heart className={`w-5 h-5 ${isLiked ? "fill-red-500 text-red-500" : ""}`} />
+              </Button>
+            </div>
+          </div>
+
+          {/* Garantías */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Truck className="w-4 h-4 text-primary" />
+              <span>Envíos a todo Chile</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Shield className="w-4 h-4 text-primary" />
+              <span>Compra Segura</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <RotateCcw className="w-4 h-4 text-primary" />
+              <span>Garantía 3D</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs Detalles */}
+      <div className="mt-16">
+        <Tabs defaultValue="description" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
+            <TabsTrigger value="description">Descripción</TabsTrigger>
+            <TabsTrigger value="seller">Vendedor</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="description" className="mt-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="prose max-w-none whitespace-pre-wrap text-muted-foreground">
+                  {product.description || "Sin descripción disponible."}
+                </div>
+                
+                {product.tags && product.tags.length > 0 && (
+                    <div className="mt-6 pt-4 border-t">
+                        <h4 className="text-sm font-semibold mb-2">Etiquetas:</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {product.tags.map((tag: string, i: number) => (
+                                <Badge key={i} variant="secondary" className="text-xs">#{tag}</Badge>
+                            ))}
+                        </div>
+                    </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="seller" className="mt-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16">
+                        <AvatarImage src={product.seller?.avatar_url} />
+                        <AvatarFallback>{product.seller?.full_name?.[0] || "V"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                        <h3 className="font-bold text-lg">{product.seller?.full_name || "Vendedor"}</h3>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="w-4 h-4" />
+                            <span>Miembro desde {new Date(product.seller?.created_at || Date.now()).getFullYear()}</span>
+                        </div>
+                    </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}
