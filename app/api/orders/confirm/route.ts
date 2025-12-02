@@ -8,7 +8,6 @@ export async function POST(request: Request) {
         const { orderId } = await request.json();
         
         // 1. INICIAR CLIENTE ADMIN (Service Role Key)
-        // Usamos la clave de administrador para saltar el RLS y poder actualizar el inventario
         const supabaseAdmin = createAdminClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY! 
@@ -17,7 +16,7 @@ export async function POST(request: Request) {
         // 2. Obtener la orden
         const { data: order, error: fetchError } = await supabaseAdmin
             .from('orders')
-            .select('*')
+            .select('items, status')
             .eq('id', orderId)
             .single();
 
@@ -35,37 +34,28 @@ export async function POST(request: Request) {
 
         // 4. Recorrer los ítems y buscar la variante para descontar
         for (const item of cleanOrderItems) {
-            // Obtenemos el producto actual
-            const { data: product } = await supabaseAdmin.from('products').select('*').eq('id', item.id).single();
+            const purchasedQuantity = Number(item.quantity) || 1;
+
+            // Buscamos la VARIANTE específica por el product_id y size_description
+            // item.id en el carrito es el product_id (asumido del carrito)
+            const { data: variant, error: variantError } = await supabaseAdmin
+                .from('product_variants')
+                .select('*')
+                .eq('product_id', item.id) 
+                .eq('size_description', item.size) // Usamos la talla LIMPIA para el match
+                .single();
             
-            if (product && product.sizes) {
-                let stockUpdated = false;
+            if (variant && !variantError) {
+                const currentQuantity = Number(variant.stock_quantity) || 0;
+                const newQuantity = Math.max(0, currentQuantity - purchasedQuantity);
 
-                const newSizes = product.sizes.map((s: any) => {
-                    // Limpiamos el string de la DB antes de comparar
-                    const cleanProductSize = String(s.size || '').trim();
-
-                    // ¡Comparación CRÍTICA! Usamos los strings LIMPIOS
-                    if (cleanProductSize === item.size) { 
-                        const currentQuantity = Number(s.quantity) || 0;
-                        const purchasedQuantity = Number(item.quantity) || 1;
-                        
-                        const newQuantity = Math.max(0, currentQuantity - purchasedQuantity);
-                        
-                        stockUpdated = true;
-                        return { ...s, quantity: newQuantity }
-                    }
-                    return s;
-                });
-
-                if (stockUpdated) { 
-                    totalItemsProcessed++;
-                    stockUpdatePromises.push(
-                        supabaseAdmin.from('products')
-                            .update({ sizes: newSizes })
-                            .eq('id', item.id)
-                    );
-                }
+                // Generamos la promesa de actualización para la VARIANTE
+                stockUpdatePromises.push(
+                    supabaseAdmin.from('product_variants')
+                        .update({ stock_quantity: newQuantity })
+                        .eq('id', variant.id) // ¡Actualizamos por ID de VARIANTE!
+                );
+                totalItemsProcessed++;
             }
         }
         
