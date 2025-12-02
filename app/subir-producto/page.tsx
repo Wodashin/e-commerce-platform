@@ -23,28 +23,23 @@ export default function SubirProducto() {
     tags: "",
   })
 
+  // Estado inicial de variantes
   const [variants, setVariants] = useState([
-    { l: "15", w: "10", h: "5", price: "3000", quantity: "1" } // Valores por defecto para facilitar
+    { l: "15", w: "10", h: "5", price: "3000", quantity: "1" }
   ])
 
-  // Subir Imágenes a Cloudflare R2
+  // Subida de imágenes a tu API (R2)
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
-
     setUploading(true)
     try {
       for (const file of Array.from(files)) {
-        const formDataToSend = new FormData()
-        formDataToSend.append("file", file)
-
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formDataToSend,
-        })
-
-        if (response.ok) {
-          const data = await response.json()
+        const dataForm = new FormData()
+        dataForm.append("file", file)
+        const res = await fetch("/api/upload", { method: "POST", body: dataForm })
+        if (res.ok) {
+          const data = await res.json()
           setImages((prev) => [...prev, data.url])
         }
       }
@@ -55,17 +50,12 @@ export default function SubirProducto() {
     }
   }
 
-  // Eliminar imagen de la lista
-  const handleRemoveImage = (indexToRemove: number) => {
-    setImages(images.filter((_, i) => i !== indexToRemove))
-    if (indexToRemove === defaultImageIndex) {
-        setDefaultImageIndex(0)
-    } else if (indexToRemove < defaultImageIndex) {
-        setDefaultImageIndex(defaultImageIndex - 1)
-    }
+  const handleRemoveImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index))
+    if (index === defaultImageIndex) setDefaultImageIndex(0)
+    else if (index < defaultImageIndex) setDefaultImageIndex(defaultImageIndex - 1)
   }
 
-  // Manejo de Variantes
   const addVariant = () => {
     setVariants([...variants, { l: "15", w: "10", h: "5", price: "3000", quantity: "1" }])
   }
@@ -76,35 +66,33 @@ export default function SubirProducto() {
   }
 
   const updateVariant = (index: number, field: string, value: string) => {
-    const newVariants: any = [...variants]
-    if (field === 'quantity' && Number(value) > 999) return;
-    newVariants[index][field] = value
-    setVariants(newVariants)
+    const newVars: any = [...variants]
+    newVars[index][field] = value
+    setVariants(newVars)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
     if (!formData.name || !formData.category || images.length === 0) {
-      alert("Faltan datos obligatorios")
+      alert("Faltan datos obligatorios (Nombre, Categoría o Imágenes)")
       return
     }
 
     setLoading(true)
     
-    // Reordenar imágenes para que la seleccionada como default vaya primero
+    // Ordenar imagen de portada
     const orderedImages = [...images]
     if (defaultImageIndex > 0 && defaultImageIndex < orderedImages.length) {
         const [selected] = orderedImages.splice(defaultImageIndex, 1)
         orderedImages.unshift(selected)
     }
 
-    // Calcular precio más bajo para la tabla principal (products)
-    const minPrice = Math.min(...variants.map(v => Number(v.price) || Infinity))
+    // Calcular precio base (el más barato para mostrar en la tarjeta)
+    const minPrice = Math.min(...variants.map(v => Number(v.price) || 0))
 
     try {
-      // PASO 1: CREAR PRODUCTO PRINCIPAL (GET ID)
-      const productResponse = await fetch("/api/products", {
+      // 1. Crear el Producto "Padre"
+      const resProduct = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,22 +101,23 @@ export default function SubirProducto() {
           description: formData.description,
           tags: formData.tags.split(",").map((t) => t.trim()),
           images: orderedImages,
-          price: minPrice, // Precio más bajo para ordenar/filtrar
+          price: minPrice, 
         }),
       })
-      const productData = await productResponse.json()
-      if (!productResponse.ok || !productData.id) throw new Error("Error al crear producto principal.")
+      
+      const productData = await resProduct.json()
+      if (!resProduct.ok || !productData.id) throw new Error("Error creando producto principal")
 
       const productId = productData.id
 
-      // PASO 2: CREAR VARIANTE (STOCK, PRECIOS, MEDIDAS)
+      // 2. Crear las Variantes "Hijos"
       const variantsData = variants.map((v) => ({
           size_description: `${v.l}x${v.w}x${v.h} cm`,
           unit_price: Number(v.price),
           stock_quantity: Number(v.quantity),
       }));
 
-      const variantsResponse = await fetch("/api/variants", {
+      const resVariants = await fetch("/api/variants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -137,15 +126,14 @@ export default function SubirProducto() {
         }),
       })
 
-      if (!variantsResponse.ok) throw new Error("Error al crear variantes.")
+      if (!resVariants.ok) throw new Error("Error guardando variantes")
 
-      // Éxito en ambos pasos
-      alert("¡Producto publicado exitosamente!")
+      alert("¡Producto creado correctamente!")
       router.push("/mis-productos") 
 
     } catch (error: any) {
       console.error(error)
-      alert("Error al subir producto: " + error.message)
+      alert("Hubo un error: " + error.message)
     } finally {
       setLoading(false)
     }
@@ -155,152 +143,67 @@ export default function SubirProducto() {
     <div className="min-h-screen bg-background py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <Link href="/mis-productos" className="flex items-center gap-2 text-primary mb-6">
-          <ArrowLeft size={20} /> Volver a mi inventario
+          <ArrowLeft size={20} /> Volver
         </Link>
 
         <Card className="p-6">
           <h1 className="text-3xl font-bold mb-8">Publicar Nuevo Producto</h1>
-
           <form onSubmit={handleSubmit} className="space-y-8">
-            {/* 1. Info Básica */}
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Información Básica</h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Nombre del Producto *</label>
-                  <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background" placeholder="Ej: Figura Goku" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Categoría *</label>
-                  <select required value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background">
-                    <option value="">Seleccionar...</option>
-                    {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="text-sm font-medium mb-2 block">Descripción</label>
-                  <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background" rows={3} />
-                </div>
-                <div className="col-span-2">
-                  <label className="text-sm font-medium mb-2 block">Etiquetas</label>
-                  <input type="text" value={formData.tags} onChange={(e) => setFormData({ ...formData, tags: e.target.value })} className="w-full px-4 py-2 border rounded-lg bg-background" placeholder="separadas, por, comas" />
-                </div>
-              </div>
+            {/* Info Básica */}
+            <div className="grid md:grid-cols-2 gap-4">
+                <input required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="border p-2 rounded" placeholder="Nombre del Producto" />
+                <select required value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="border p-2 rounded">
+                    <option value="">Categoría...</option>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="border p-2 rounded col-span-2" placeholder="Descripción" rows={3} />
+                <input value={formData.tags} onChange={(e) => setFormData({...formData, tags: e.target.value})} className="border p-2 rounded col-span-2" placeholder="Etiquetas (separadas por comas)" />
             </div>
 
-            {/* 2. Imágenes */}
+            {/* Imágenes */}
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Imágenes</h2>
-                <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded-md">
-                    Haz clic en una imagen para seleccionarla como portada
-                </span>
+              <h2 className="font-semibold mb-2">Imágenes</h2>
+              <div className="border-2 border-dashed p-4 text-center cursor-pointer relative rounded-lg hover:bg-muted/50">
+                <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0" />
+                {uploading ? "Subiendo..." : "Click para subir imágenes"}
               </div>
-              
-              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center relative hover:bg-muted/50 transition-colors">
-                <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                <div className="flex flex-col items-center">
-                    {uploading ? <span className="animate-pulse">Subiendo...</span> : (
-                        <>
-                            <Upload size={32} className="mb-2 text-muted-foreground" />
-                            <span>Arrastra o haz clic para subir imágenes</span>
-                        </>
-                    )}
-                </div>
-              </div>
-
-              {images.length > 0 && (
-                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {images.map((url, i) => (
-                    <div 
-                        key={i} 
-                        onClick={() => setDefaultImageIndex(i)}
-                        className={`relative aspect-square group rounded-lg overflow-hidden border-2 cursor-pointer transition-all duration-200 ${
-                            i === defaultImageIndex 
-                                ? "border-primary ring-2 ring-primary/20 shadow-md scale-[1.02]" 
-                                : "border-transparent hover:border-muted-foreground/30"
-                        }`}
-                    >
-                        <img src={url} className="object-cover w-full h-full" alt={`Imagen ${i}`} />
-                        
-                        {/* Indicador de Portada */}
-                        <div className={`absolute inset-x-0 bottom-0 py-1.5 text-center text-xs font-bold text-white transition-all ${
-                            i === defaultImageIndex 
-                                ? "bg-primary opacity-100" 
-                                : "bg-black/60 opacity-0 group-hover:opacity-100 translation-y-full group-hover:translate-y-0"
-                        }`}>
-                            {i === defaultImageIndex ? (
-                                <span className="flex items-center justify-center gap-1"><Star size={10} fill="currentColor" /> Portada</span>
-                            ) : "Elegir como Portada"}
-                        </div>
-
-                        {/* Botón Eliminar */}
-                        <button 
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                handleRemoveImage(i)
-                            }}
-                            className="absolute top-1 right-1 bg-red-500/90 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                            title="Eliminar imagen"
-                        >
-                            <X size={12} />
-                        </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 3. Variantes y Stock (NEW STRUCTURE) */}
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Variantes por Tamaño y Stock</h2>
-                <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="w-4 h-4 mr-2" /> Agregar Tamaño</Button>
-              </div>
-              
-              <div className="space-y-3">
-                {variants.map((variant, index) => (
-                  <div key={index} className="flex flex-col md:flex-row gap-3 items-end bg-muted/30 p-4 rounded-lg border">
-                    {/* Medidas (Medidas que se guardan como string de descripción) */}
-                    <div className="flex gap-2 items-end">
-                      {['l', 'w', 'h'].map((dim) => (
-                          <div key={dim}>
-                              <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">{dim === 'l' ? 'Largo' : dim === 'w' ? 'Ancho' : 'Alto'} (cm)</label>
-                              <input 
-                                  type="number" 
-                                  placeholder={dim === 'l' ? '15' : dim === 'w' ? '10' : '5'}
-                                  value={variant[dim as keyof typeof variant]} 
-                                  onChange={(e) => updateVariant(index, dim, e.target.value)} 
-                                  className="w-16 px-2 py-2 border rounded-md text-sm text-center" 
-                              />
-                          </div>
-                      ))}
-                    </div>
-
-                    {/* Precio (unit_price) */}
-                    <div className="flex-1 w-full pl-4 border-l">
-                      <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Precio (CLP)</label>
-                      <input type="number" placeholder="$ 5000" value={variant.price} onChange={(e) => updateVariant(index, 'price', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
-                    </div>
-                    
-                    {/* Stock (stock_quantity) */}
-                    <div className="w-24">
-                      <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Stock</label>
-                      <input type="number" placeholder="Cant." max="999" value={variant.quantity} onChange={(e) => updateVariant(index, 'quantity', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
-                    </div>
-
-                    {variants.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" className="text-red-500" onClick={() => removeVariant(index)}><Trash2 size={18} /></Button>
-                    )}
+              <div className="grid grid-cols-4 gap-4 mt-4">
+                {images.map((url, i) => (
+                  <div key={i} onClick={() => setDefaultImageIndex(i)} className={`relative aspect-square border-2 rounded overflow-hidden cursor-pointer ${i === defaultImageIndex ? "border-green-500" : ""}`}>
+                    <img src={url} className="object-cover w-full h-full" />
+                    {i === defaultImageIndex && <div className="absolute bottom-0 w-full bg-green-500 text-white text-xs text-center">Portada</div>}
+                    <button type="button" onClick={(e) => {e.stopPropagation(); handleRemoveImage(i)}} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">X</button>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t">
-              <Button type="submit" disabled={loading} size="lg" className="flex-1">{loading ? "Publicando..." : "Publicar Producto"}</Button>
+            {/* Variantes */}
+            <div>
+              <h2 className="font-semibold mb-2">Variantes (Tallas y Stock)</h2>
+              <Button type="button" size="sm" variant="outline" onClick={addVariant} className="mb-4"><Plus className="w-4 h-4 mr-2"/> Agregar Talla</Button>
+              <div className="space-y-2">
+                {variants.map((v, i) => (
+                  <div key={i} className="flex gap-2 items-center bg-muted/20 p-2 rounded">
+                    <input type="number" placeholder="Largo" value={v.l} onChange={(e) => updateVariant(i, 'l', e.target.value)} className="w-16 border p-1 rounded text-center" />
+                    <span>x</span>
+                    <input type="number" placeholder="Ancho" value={v.w} onChange={(e) => updateVariant(i, 'w', e.target.value)} className="w-16 border p-1 rounded text-center" />
+                    <span>x</span>
+                    <input type="number" placeholder="Alto" value={v.h} onChange={(e) => updateVariant(i, 'h', e.target.value)} className="w-16 border p-1 rounded text-center" />
+                    <span className="text-sm text-muted-foreground">cm</span>
+                    
+                    <input type="number" placeholder="Precio" value={v.price} onChange={(e) => updateVariant(i, 'price', e.target.value)} className="w-24 border p-1 rounded" />
+                    <input type="number" placeholder="Stock" value={v.quantity} onChange={(e) => updateVariant(i, 'quantity', e.target.value)} className="w-20 border p-1 rounded" />
+                    
+                    {variants.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => removeVariant(i)}><Trash2 className="w-4 h-4 text-red-500"/></Button>}
+                  </div>
+                ))}
+              </div>
             </div>
+
+            <Button type="submit" className="w-full" disabled={loading} size="lg">
+                {loading ? <Loader2 className="animate-spin mr-2" /> : null} Publicar Producto
+            </Button>
           </form>
         </Card>
       </div>
