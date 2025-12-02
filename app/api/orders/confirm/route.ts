@@ -1,4 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
+import { createClient as createAdminClient } from '@supabase/supabase-js'; // Importamos el cliente de Admin
+import { createServerClient } from '@supabase/ssr'; // Para compatibilidad con otros archivos
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -6,40 +7,37 @@ export async function POST(request: Request) {
     try {
         const { orderId } = await request.json();
         
-        const cookieStore = await cookies();
-        const supabase = createServerClient(
+        // 1. INICIAR CLIENTE ADMIN (Service Role Key)
+        // ESTO BYPASSEA RLS y permite actualizar el stock
+        const supabaseAdmin = createAdminClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
+            process.env.SUPABASE_SERVICE_ROLE_KEY! // <-- Usamos la clave de alto privilegio
         );
 
-        // 1. Obtener la orden
-        const { data: order, error: fetchError } = await supabase
+        // 2. Obtener la orden y el producto usando el cliente Admin
+        const { data: order, error: fetchError } = await supabaseAdmin
             .from('orders')
             .select('*')
             .eq('id', orderId)
             .single();
 
         if (fetchError || !order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
-
-        // Evitar procesar dos veces
         if (order.status === 'paid') return NextResponse.json({ message: "Orden ya procesada" });
 
-        // 2. Descontar Stock y Marcar como Pagada (USANDO UNA TRANSACCIÓN para seguridad)
+        // 3. Descontar Stock y Marcar como Pagada
         
-        // Creamos una lista de las promesas de actualización de stock
         const stockUpdatePromises = [];
         let totalItemsProcessed = 0;
 
-        // Recorremos los ítems comprados
         for (const item of order.items) {
-            const { data: product } = await supabase.from('products').select('*').eq('id', item.id).single();
+            // Obtenemos el producto actual
+            const { data: product } = await supabaseAdmin.from('products').select('*').eq('id', item.id).single();
             
             if (product && product.sizes) {
                 let stockUpdated = false;
 
                 const newSizes = product.sizes.map((s: any) => {
-                    // Comparación estricta de string para encontrar la variante correcta
+                    // Si encontramos la variante por tamaño
                     if (s.size === item.size) { 
                         const newQuantity = Math.max(0, Number(s.quantity) - Number(item.quantity));
                         stockUpdated = true;
@@ -48,11 +46,11 @@ export async function POST(request: Request) {
                     return s;
                 });
 
-                // Si encontramos y actualizamos la variante, guardamos la promesa
+                // Si encontramos la variante, generamos la promesa de actualización
                 if (stockUpdated) { 
                     totalItemsProcessed++;
                     stockUpdatePromises.push(
-                        supabase.from('products')
+                        supabaseAdmin.from('products') // <-- Usamos Admin Client para el UPDATE
                             .update({ sizes: newSizes })
                             .eq('id', item.id)
                     );
@@ -60,15 +58,11 @@ export async function POST(request: Request) {
             }
         }
         
-        // Ejecutar todas las actualizaciones de stock en paralelo
+        // Ejecutar todas las actualizaciones de stock
         await Promise.all(stockUpdatePromises);
 
-        // 3. Marcar la orden como pagada (SOLO después de descontar el stock)
-        await supabase.from('orders').update({ status: 'paid' }).eq('id', orderId);
-
-        if (totalItemsProcessed === 0) {
-            console.warn(`[STOCK ISSUE] No se descontó stock: Falló el match de size para la orden ${orderId}`);
-        }
+        // 4. Marcar la orden como pagada
+        await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderId);
 
         return NextResponse.json({ success: true });
 
