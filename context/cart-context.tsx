@@ -9,7 +9,7 @@ export type CartItem = {
   image: string
   size?: string
   quantity: number
-  sellerId: string
+  sellerId?: string
 }
 
 interface CartContextType {
@@ -26,23 +26,29 @@ const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
+  const [isLoaded, setIsLoaded] = useState(false)
 
   // Cargar carrito del localStorage al iniciar
   useEffect(() => {
-    const savedCart = localStorage.getItem("shopping-cart")
-    if (savedCart) {
-      try {
-        setItems(JSON.parse(savedCart))
-      } catch (e) {
-        console.error("Error parsing cart", e)
+    if (typeof window !== "undefined") {
+      const savedCart = localStorage.getItem("shopping-cart")
+      if (savedCart) {
+        try {
+          setItems(JSON.parse(savedCart))
+        } catch (e) {
+          console.error("Error parsing cart", e)
+        }
       }
+      setIsLoaded(true)
     }
   }, [])
 
   // Guardar en localStorage cada vez que cambia
   useEffect(() => {
-    localStorage.setItem("shopping-cart", JSON.stringify(items))
-  }, [items])
+    if (isLoaded) {
+      localStorage.setItem("shopping-cart", JSON.stringify(items))
+    }
+  }, [items, isLoaded])
 
   const addItem = (newItem: CartItem) => {
     setItems((prev) => {
