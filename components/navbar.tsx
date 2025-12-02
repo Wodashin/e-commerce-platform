@@ -28,64 +28,55 @@ export function Navbar() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   
-  // Estados de permisos
+  // NUEVOS ESTADOS DE CONTROL
   const [isAdmin, setIsAdmin] = useState(false)
   const [isVendor, setIsVendor] = useState(false)
 
+  // Función auxiliar para chequear roles
+  const checkRoles = async (currentUser: User | null) => {
+    if (!currentUser) {
+      setIsAdmin(false)
+      setIsVendor(false)
+      return
+    }
+
+    // 1. Chequeo de Admin (por email)
+    const adminCheck = currentUser.email?.toLowerCase().includes("ilyon3d")
+    setIsAdmin(!!adminCheck)
+
+    // 2. Chequeo de Vendedor (Base de datos)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', currentUser.id)
+      .single()
+
+    // Es vendedor si la BD dice 'vendor' O si es el Admin Supremo
+    if (profile?.role === 'vendor' || adminCheck) {
+      setIsVendor(true)
+    } else {
+      setIsVendor(false)
+    }
+  }
+
   useEffect(() => {
-    const checkUserAndRole = async () => {
+    // Chequeo inicial
+    const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-
-      if (user) {
-        // 1. Verificar si es Admin por email
-        const adminEmail = "ilyon3d@gmail.com" // Ajusta si es diferente
-        const isUserAdmin = user.email?.toLowerCase().includes("ilyon3d")
-        setIsAdmin(!!isUserAdmin)
-
-        // 2. Verificar Rol en base de datos
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-        
-        // Es vendedor si el rol es 'vendor' O si es el admin supremo
-        if (profile?.role === 'vendor' || isUserAdmin) {
-          setIsVendor(true)
-        } else {
-          setIsVendor(false)
-        }
-      }
+      await checkRoles(user)
     }
-    
-    checkUserAndRole()
+    init()
 
+    // Suscripción a cambios de sesión
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null)
-      
-      if (session?.user) {
-        const isUserAdmin = session.user.email?.toLowerCase().includes("ilyon3d")
-        setIsAdmin(!!isUserAdmin)
-        
-        // Volver a chequear el perfil al cambiar estado
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single()
-          
-        if (profile?.role === 'vendor' || isUserAdmin) {
-          setIsVendor(true)
-        } else {
-          setIsVendor(false)
-        }
-      } else {
-        setIsAdmin(false)
-        setIsVendor(false)
-      }
+      const currentUser = session?.user ?? null
+      setUser(currentUser)
+      await checkRoles(currentUser)
       
       if (_event === 'SIGNED_OUT') {
+        setIsVendor(false)
+        setIsAdmin(false)
         router.refresh()
       }
     })
@@ -128,9 +119,7 @@ export function Navbar() {
                 <Link href="/categorias">Categorías</Link>
               </Button>
 
-              {/* Botón del Carrito */}
               <CartSheet />
-
               <ThemeToggle />
 
               {user ? (
@@ -147,14 +136,12 @@ export function Navbar() {
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name || 'Usuario'}</p>
-                        <p className="text-xs leading-none text-muted-foreground">
-                          {user.email}
-                        </p>
+                        <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     
-                    {/* Solo Admin ve esto */}
+                    {/* SOLO PARA ADMIN */}
                     {isAdmin && (
                       <DropdownMenuItem asChild className="text-orange-600 focus:text-orange-700 bg-orange-50 focus:bg-orange-100">
                         <Link href="/admin">
@@ -171,7 +158,7 @@ export function Navbar() {
                       </Link>
                     </DropdownMenuItem>
 
-                    {/* Solo Vendedores o Admin ven esto */}
+                    {/* AQUI ESTABA EL ERROR: AHORA SOLO APARECE SI ES VENDEDOR */}
                     {isVendor && (
                       <DropdownMenuItem asChild>
                         <Link href="/subir-producto">
@@ -223,6 +210,7 @@ export function Navbar() {
                       <Link href="/perfil">Mi Perfil</Link>
                     </Button>
                     
+                    {/* TAMBIEN PROTEGIDO EN MOVIL */}
                     {isVendor && (
                       <Button variant="ghost" className="justify-start" asChild>
                         <Link href="/subir-producto">Vender Producto</Link>
