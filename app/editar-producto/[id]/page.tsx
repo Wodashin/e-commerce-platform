@@ -6,7 +6,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge" // <--- ¡ESTA LÍNEA FALTABA!
+import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Upload, X, Plus, Trash2, Star, Loader2, Save } from "lucide-react"
 
 const CATEGORIES = ["Figuras", "Hogar", "Accesorios", "Arquitectura", "Juguetes", "Arte"]
@@ -33,7 +33,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     { l: "", w: "", h: "", price: "", quantity: "" }
   ])
 
-  // Cargar datos del producto
   useEffect(() => {
     const loadProduct = async () => {
       const { id } = await params
@@ -41,7 +40,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
       const { data: product, error } = await supabase
         .from('products')
-        .select('*')
+        .select('*, product_variants(*)')
         .eq('id', id)
         .single()
 
@@ -51,7 +50,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         return
       }
 
-      // Rellenar formulario
       setFormData({
         name: product.name,
         category: product.category,
@@ -60,20 +58,26 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       })
       setImages(product.images || [])
       
-      // Parsear variantes (sizes)
-      if (product.sizes && Array.isArray(product.sizes)) {
-        const parsedVariants = product.sizes.map((s: any) => {
+      // Cargar variantes desde la DB
+      if (product.product_variants && product.product_variants.length > 0) {
+        const parsedVariants = product.product_variants.map((v: any) => {
             // Intentar extraer dimensiones del string "LxAxH cm"
-            const dims = s.size.replace(" cm", "").split("x")
+            // Formato esperado: "15x10x5 cm"
+            const sizeStr = v.size_description.replace(" cm", "").trim()
+            const dims = sizeStr.split("x")
+            
             return {
                 l: dims[0] || "",
                 w: dims[1] || "",
                 h: dims[2] || "",
-                price: s.price,
-                quantity: s.quantity
+                price: String(v.unit_price),
+                quantity: String(v.stock_quantity)
             }
         })
         setVariants(parsedVariants)
+      } else {
+        // Fallback por si no hay variantes
+        setVariants([{ l: "", w: "", h: "", price: "", quantity: "" }])
       }
 
       setLoadingData(false)
@@ -82,7 +86,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     loadProduct()
   }, [params, router, supabase])
 
-  // Subir Imágenes
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
@@ -116,7 +119,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     else if (indexToRemove < defaultImageIndex) setDefaultImageIndex(defaultImageIndex - 1)
   }
 
-  // Variantes
   const addVariant = () => {
     setVariants([...variants, { l: "", w: "", h: "", price: "", quantity: "" }])
   }
@@ -126,12 +128,22 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     setVariants(variants.filter((_, i) => i !== index))
   }
 
+  // --- LÓGICA DE VALIDACIÓN MEJORADA ---
   const updateVariant = (index: number, field: string, value: string) => {
     let finalValue = value;
+
+    // Validación estricta para Stock y Precio
     if (field === 'quantity' || field === 'price') {
-      const num = Number(value);
-      if (num < 0) finalValue = "0";
-      if (field === 'quantity' && num > 999) finalValue = "999"; //stock maximo de 999
+      // Si el valor está vacío, lo dejamos pasar para permitir borrar
+      if (value === "") {
+         finalValue = "";
+      } else {
+         const num = Number(value);
+         // Evitar negativos
+         if (num < 0) finalValue = "0";
+         // Evitar números mayores a 999 solo para stock
+         if (field === 'quantity' && num > 999) finalValue = "999";
+      }
     }
 
     const newVariants: any = [...variants]
@@ -148,7 +160,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
     setSaving(true)
     
-    // Reordenar imágenes (Portada primero)
     const orderedImages = [...images]
     if (defaultImageIndex > 0 && defaultImageIndex < orderedImages.length) {
         const [selected] = orderedImages.splice(defaultImageIndex, 1)
@@ -157,15 +168,16 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
     try {
       const response = await fetch("/api/products", {
-        method: "PUT", // Usamos PUT para actualizar
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: productId, // Importante: Enviamos el ID
+          id: productId,
           name: formData.name,
           category: formData.category,
           description: formData.description,
           tags: formData.tags.split(",").map((t) => t.trim()),
           images: orderedImages,
+          // Enviamos 'sizes' para que la API (PUT) reconstruya las variantes
           sizes: variants.map((v) => ({
             size: `${v.l}x${v.w}x${v.h} cm`,
             price: Number(v.price),
@@ -181,6 +193,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         throw new Error("Error en la actualización")
       }
     } catch (error) {
+      console.error(error)
       alert("Error al actualizar producto")
     } finally {
       setSaving(false)
@@ -201,7 +214,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         <Card className="p-6">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold">Editar Producto</h1>
-            {/* Aquí es donde se usaba Badge y fallaba por falta de import */}
             <Badge variant="outline">ID: {productId?.slice(0, 8)}...</Badge>
           </div>
 
@@ -269,17 +281,25 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       {['l', 'w', 'h'].map((dim) => (
                         <div key={dim}>
                             <label className="text-[10px] uppercase font-bold mb-1 block">{dim === 'l' ? 'Largo' : dim === 'w' ? 'Ancho' : 'Alto'}</label>
-                            <input type="number" value={variant[dim as keyof typeof variant]} onChange={(e) => updateVariant(index, dim, e.target.value)} className="w-16 px-2 py-2 border rounded-md text-center text-sm" />
+                            {/* AQUI EL CAMBIO: step="0.1" para permitir decimales en la edición */}
+                            <input 
+                              type="number" 
+                              min="0" 
+                              step="0.1" 
+                              value={variant[dim as keyof typeof variant]} 
+                              onChange={(e) => updateVariant(index, dim, e.target.value)} 
+                              className="w-16 px-2 py-2 border rounded-md text-center text-sm" 
+                            />
                         </div>
                       ))}
                     </div>
                     <div className="flex-1 pl-2">
                       <label className="text-[10px] uppercase font-bold mb-1 block">Precio</label>
-                      <input type="number" value={variant.price} onChange={(e) => updateVariant(index, 'price', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
+                      <input type="number" min="0" value={variant.price} onChange={(e) => updateVariant(index, 'price', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
                     </div>
                     <div className="w-20">
                       <label className="text-[10px] uppercase font-bold mb-1 block">Stock</label>
-                      <input type="number" value={variant.quantity} onChange={(e) => updateVariant(index, 'quantity', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
+                      <input type="number" min="0" max="999" value={variant.quantity} onChange={(e) => updateVariant(index, 'quantity', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
                     </div>
                     {variants.length > 1 && <Button type="button" variant="ghost" size="icon" className="text-red-500" onClick={() => removeVariant(index)}><Trash2 size={18} /></Button>}
                   </div>
