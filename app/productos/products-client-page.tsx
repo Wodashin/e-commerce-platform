@@ -32,12 +32,10 @@ export default function ProductsClientPage({ initialProducts }: ProductsClientPa
   const [sortBy, setSortBy] = useState("relevance")
   const [showFilters, setShowFilters] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  // Inicializamos con los datos que vienen del servidor
   const [products, setProducts] = useState<any[]>(initialProducts)
   const [allTags, setAllTags] = useState<string[]>([])
   const [selectedTags, setSelectedTags] = useState<string[]>([])
 
-  // Efecto solo para extraer tags de los productos iniciales
   useEffect(() => {
     if (initialProducts.length > 0) {
       const tags = new Set<string>()
@@ -47,6 +45,14 @@ export default function ProductsClientPage({ initialProducts }: ProductsClientPa
       setAllTags(Array.from(tags).sort())
     }
   }, [initialProducts])
+
+  // Helper para obtener precio mínimo desde la nueva tabla de variantes
+  const getMinPrice = (product: any) => {
+    if (product.product_variants && product.product_variants.length > 0) {
+        return Math.min(...product.product_variants.map((v: any) => Number(v.unit_price)))
+    }
+    return Number(product.price) || 0
+  }
 
   const filteredProducts = products.filter((product) => {
     const matchCategory = selectedCategory === "Todas" || product.category === selectedCategory
@@ -58,29 +64,22 @@ export default function ProductsClientPage({ initialProducts }: ProductsClientPa
 
     const matchTags = selectedTags.length === 0 || selectedTags.some((tag) => product.tags?.includes(tag))
 
-    // Usar el precio base calculado o el mínimo de los tamaños
-    const minPrice = product.price || Math.min(...(product.sizes?.map((s: any) => s.price) || [0]))
+    const minPrice = getMinPrice(product)
     const matchPrice = minPrice >= priceRange[0] && minPrice <= priceRange[1]
 
     return matchCategory && matchSearch && matchTags && matchPrice
   })
 
-  // Lógica de ordenamiento
   const sortedProducts = [...filteredProducts].sort((a, b) => {
-    const priceA = a.price || 0
-    const priceB = b.price || 0
+    const priceA = getMinPrice(a)
+    const priceB = getMinPrice(b)
     
     switch (sortBy) {
-      case "price-low":
-        return priceA - priceB
-      case "price-high":
-        return priceB - priceA
-      case "newest":
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      case "rating":
-        return (b.rating || 0) - (a.rating || 0)
-      default:
-        return 0
+      case "price-low": return priceA - priceB
+      case "price-high": return priceB - priceA
+      case "newest": return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      case "rating": return (b.rating || 0) - (a.rating || 0)
+      default: return 0
     }
   })
 
@@ -90,70 +89,29 @@ export default function ProductsClientPage({ initialProducts }: ProductsClientPa
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">
-      {/* Filters Sidebar */}
+      {/* Sidebar Filtros */}
       <div className={`lg:w-64 space-y-6 ${showFilters ? "block" : "hidden lg:block"}`}>
         <Card className="p-4">
           <h3 className="font-semibold mb-4">Filtros</h3>
-
-          {/* Search */}
           <div className="space-y-2 mb-4">
-            <label className="text-sm font-medium">Buscar por nombre o etiqueta</label>
-            <Input
-              placeholder="Buscar productos..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <label className="text-sm font-medium">Buscar</label>
+            <Input placeholder="Nombre..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
-
-          {/* Categories */}
           <div className="space-y-2 mb-4">
             <label className="text-sm font-medium">Categorías</label>
             <div className="space-y-2">
-              {CATEGORIES.map((category) => (
-                <div key={category} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={category}
-                    checked={selectedCategory === category}
-                    onCheckedChange={() => setSelectedCategory(category)}
-                  />
-                  <label htmlFor={category} className="text-sm cursor-pointer">
-                    {category}
-                  </label>
+              {CATEGORIES.map((cat) => (
+                <div key={cat} className="flex items-center space-x-2">
+                  <Checkbox id={cat} checked={selectedCategory === cat} onCheckedChange={() => setSelectedCategory(cat)} />
+                  <label htmlFor={cat} className="text-sm cursor-pointer">{cat}</label>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Tags Filter */}
-          {allTags.length > 0 && (
-            <div className="space-y-2 mb-4">
-              <label className="text-sm font-medium">Etiquetas</label>
-              <div className="flex flex-wrap gap-2">
-                {allTags.slice(0, 10).map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant={selectedTags.includes(tag) ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => toggleTag(tag)}
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Price Range */}
           <div className="space-y-2 mb-4">
-            <label className="text-sm font-medium">Rango de Precio</label>
+            <label className="text-sm font-medium">Precio</label>
             <div className="px-2">
-              <Slider
-                value={priceRange}
-                onValueChange={setPriceRange}
-                max={100000}
-                step={1000}
-                className="w-full"
-              />
+              <Slider value={priceRange} onValueChange={setPriceRange} max={100000} step={1000} className="w-full" />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
                 <span>${priceRange[0].toLocaleString()}</span>
                 <span>${priceRange[1].toLocaleString()}</span>
@@ -163,146 +121,51 @@ export default function ProductsClientPage({ initialProducts }: ProductsClientPa
         </Card>
       </div>
 
-      {/* Products Grid */}
+      {/* Grid Productos */}
       <div className="flex-1">
-        {/* Sort and Results Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <div>
-             <h1 className="text-3xl font-bold mb-2 lg:hidden">Productos 3D</h1>
-             <p className="text-sm text-muted-foreground">Mostrando {sortedProducts.length} resultados</p>
-          </div>
-          
-          <div className="flex items-center gap-4 w-full md:w-auto">
-             <div className="flex items-center space-x-2">
-              <Button
-                variant={viewMode === "grid" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("grid")}
-              >
-                <Grid className="w-4 h-4" />
-              </Button>
-              <Button
-                variant={viewMode === "list" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("list")}
-              >
-                <List className="w-4 h-4" />
-              </Button>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="lg:hidden">
-              <Filter className="w-4 h-4 mr-2" />
-              Filtros
-            </Button>
-            <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[180px]">
-                <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                {sortOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                    </SelectItem>
-                ))}
-                </SelectContent>
+        <div className="flex justify-between items-center mb-6">
+          <p className="text-sm text-muted-foreground">{sortedProducts.length} resultados</p>
+          <div className="flex gap-4">
+             <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="lg:hidden"><Filter className="w-4 h-4 mr-2" />Filtros</Button>
+             <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>{sortOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         </div>
 
-        {/* Products */}
-        <div
-          className={`grid gap-6 ${
-            viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"
-          }`}
-        >
-          {sortedProducts.map((product) => (
-            <Card
-              key={product.id}
-              className={`group hover:shadow-xl transition-all duration-300 overflow-hidden ${
-                viewMode === "list" ? "flex" : ""
-              }`}
-            >
-              <div className={`relative ${viewMode === "list" ? "w-48 flex-shrink-0" : ""}`}>
-                <Image
-                  src={product.images?.[0] || "/placeholder.svg?height=300&width=300&query=3D+product"}
-                  alt={product.name}
-                  width={300}
-                  height={300}
-                  className={`object-cover group-hover:scale-105 transition-transform duration-300 ${
-                    viewMode === "list" ? "w-full h-full" : "w-full h-48"
-                  }`}
-                />
-                <div className="absolute top-2 right-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {product.category}
-                  </Badge>
-                </div>
+        <div className={`grid gap-6 ${viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"}`}>
+          {sortedProducts.map((product) => {
+            const minPrice = getMinPrice(product)
+            const variants = product.product_variants || []
+
+            return (
+            <Card key={product.id} className="group hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col">
+              <div className="relative aspect-square w-full">
+                <Image src={product.images?.[0] || "/placeholder.svg"} alt={product.name} fill className="object-cover group-hover:scale-105 transition-transform" />
+                <Badge variant="secondary" className="absolute top-2 right-2 text-xs">{product.category}</Badge>
               </div>
-
-              <CardContent className={`p-4 ${viewMode === "list" ? "flex-1" : ""}`}>
-                <div className={viewMode === "list" ? "flex justify-between h-full" : ""}>
-                  <div className={viewMode === "list" ? "flex-1 pr-4" : ""}>
-                    <h3 className="font-semibold mb-2 line-clamp-2">{product.name}</h3>
+              <CardContent className="p-4 flex-1 flex flex-col">
+                <div className="flex-1">
+                    <h3 className="font-semibold mb-1 line-clamp-2">{product.name}</h3>
                     <p className="text-sm text-muted-foreground mb-2">por {product.seller?.full_name || 'Vendedor'}</p>
-
-                    <div className="mb-2 text-xs">
-                      <span className="text-muted-foreground">Tamaños: </span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {product.sizes?.map((size: any) => (
-                          <Badge key={size.size} variant="outline" className="text-xs">
-                            {size.size}
-                          </Badge>
+                    <div className="mb-3 flex flex-wrap gap-1">
+                        {variants.map((v: any) => (
+                          <Badge key={v.id} variant="outline" className="text-[10px]">{v.size_description}</Badge>
                         ))}
-                      </div>
                     </div>
-
-                    {product.tags && product.tags.length > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-1">
-                        {product.tags.slice(0, 3).map((tag: string) => (
-                          <Badge key={tag} variant="outline" className="text-xs cursor-pointer hover:bg-primary/10">
-                            #{tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className={viewMode === "list" ? "flex flex-col justify-between items-end" : ""}>
-                    <div className="mb-3">
-                      <span className="text-xl font-bold text-green-600">
-                        ${(product.price || 0).toLocaleString("es-CL")}
-                      </span>
-                      <p className="text-xs text-muted-foreground">desde</p>
+                </div>
+                <div className="flex items-end justify-between mt-auto">
+                    <div>
+                        <span className="text-lg font-bold text-green-600">${minPrice.toLocaleString("es-CL")}</span>
+                        <p className="text-[10px] text-muted-foreground">desde</p>
                     </div>
-
-                    <div className={`flex gap-2 ${viewMode === "list" ? "flex-col w-32" : ""}`}>
-                      <Button size="sm" className="flex-1" asChild>
-                        <Link href={`/producto/${product.id}`}>Ver Detalles</Link>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          window.open(
-                            `https://wa.me/56912345678?text=Hola! Me interesa el producto: ${product.name}`,
-                            "_blank",
-                          )
-                        }
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
+                    <Button size="sm" asChild><Link href={`/producto/${product.id}`}>Ver</Link></Button>
                 </div>
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
-
-        {sortedProducts.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-lg">No se encontraron productos</p>
-          </div>
-        )}
       </div>
     </div>
   )
