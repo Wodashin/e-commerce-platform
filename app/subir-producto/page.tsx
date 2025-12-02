@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ArrowLeft, Upload, X, Plus, Trash2, Star, Check } from "lucide-react"
+import { ArrowLeft, Upload, X, Plus, Trash2, Star, Loader2 } from "lucide-react"
 
 const CATEGORIES = ["Figuras", "Hogar", "Accesorios", "Arquitectura", "Juguetes", "Arte"]
 
@@ -14,7 +14,7 @@ export default function SubirProducto() {
   const [loading, setLoading] = useState(false)
   const [images, setImages] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
-  const [defaultImageIndex, setDefaultImageIndex] = useState(0) // <--- Nuevo estado para la portada
+  const [defaultImageIndex, setDefaultImageIndex] = useState(0)
 
   const [formData, setFormData] = useState({
     name: "",
@@ -23,9 +23,8 @@ export default function SubirProducto() {
     tags: "",
   })
 
-  // Ahora cada variante tiene dimensiones específicas
   const [variants, setVariants] = useState([
-    { l: "", w: "", h: "", price: "", quantity: "" }
+    { l: "15", w: "10", h: "5", price: "3000", quantity: "1" } // Valores por defecto para facilitar
   ])
 
   // Subir Imágenes a Cloudflare R2
@@ -59,7 +58,6 @@ export default function SubirProducto() {
   // Eliminar imagen de la lista
   const handleRemoveImage = (indexToRemove: number) => {
     setImages(images.filter((_, i) => i !== indexToRemove))
-    // Ajustar el índice de la portada si es necesario
     if (indexToRemove === defaultImageIndex) {
         setDefaultImageIndex(0)
     } else if (indexToRemove < defaultImageIndex) {
@@ -69,7 +67,7 @@ export default function SubirProducto() {
 
   // Manejo de Variantes
   const addVariant = () => {
-    setVariants([...variants, { l: "", w: "", h: "", price: "", quantity: "" }])
+    setVariants([...variants, { l: "15", w: "10", h: "5", price: "3000", quantity: "1" }])
   }
 
   const removeVariant = (index: number) => {
@@ -101,8 +99,12 @@ export default function SubirProducto() {
         orderedImages.unshift(selected)
     }
 
+    // Calcular precio más bajo para la tabla principal (products)
+    const minPrice = Math.min(...variants.map(v => Number(v.price) || Infinity))
+
     try {
-      const response = await fetch("/api/products", {
+      // PASO 1: CREAR PRODUCTO PRINCIPAL (GET ID)
+      const productResponse = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -110,21 +112,40 @@ export default function SubirProducto() {
           category: formData.category,
           description: formData.description,
           tags: formData.tags.split(",").map((t) => t.trim()),
-          images: orderedImages, // Enviamos el array ya ordenado
-          sizes: variants.map((v) => ({
-            size: `${v.l}x${v.w}x${v.h} cm`,
-            price: Number(v.price),
-            quantity: Number(v.quantity),
-          })),
+          images: orderedImages,
+          price: minPrice, // Precio más bajo para ordenar/filtrar
+        }),
+      })
+      const productData = await productResponse.json()
+      if (!productResponse.ok || !productData.id) throw new Error("Error al crear producto principal.")
+
+      const productId = productData.id
+
+      // PASO 2: CREAR VARIANTE (STOCK, PRECIOS, MEDIDAS)
+      const variantsData = variants.map((v) => ({
+          size_description: `${v.l}x${v.w}x${v.h} cm`,
+          unit_price: Number(v.price),
+          stock_quantity: Number(v.quantity),
+      }));
+
+      const variantsResponse = await fetch("/api/variants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_id: productId,
+          variants: variantsData,
         }),
       })
 
-      if (response.ok) {
-        alert("¡Producto publicado exitosamente!")
-        router.push("/mis-productos") 
-      }
-    } catch (error) {
-      alert("Error al subir producto")
+      if (!variantsResponse.ok) throw new Error("Error al crear variantes.")
+
+      // Éxito en ambos pasos
+      alert("¡Producto publicado exitosamente!")
+      router.push("/mis-productos") 
+
+    } catch (error: any) {
+      console.error(error)
+      alert("Error al subir producto: " + error.message)
     } finally {
       setLoading(false)
     }
@@ -167,7 +188,7 @@ export default function SubirProducto() {
               </div>
             </div>
 
-            {/* 2. Imágenes (ACTUALIZADO) */}
+            {/* 2. Imágenes */}
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold">Imágenes</h2>
@@ -231,37 +252,39 @@ export default function SubirProducto() {
               )}
             </div>
 
-            {/* 3. Dimensiones y Precios */}
+            {/* 3. Variantes y Stock (NEW STRUCTURE) */}
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Variantes por Tamaño</h2>
+                <h2 className="text-xl font-semibold">Variantes por Tamaño y Stock</h2>
                 <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="w-4 h-4 mr-2" /> Agregar Tamaño</Button>
               </div>
               
               <div className="space-y-3">
                 {variants.map((variant, index) => (
                   <div key={index} className="flex flex-col md:flex-row gap-3 items-end bg-muted/30 p-4 rounded-lg border">
+                    {/* Medidas (Medidas que se guardan como string de descripción) */}
                     <div className="flex gap-2 items-end">
-                      <div>
-                        <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Largo (cm)</label>
-                        <input type="number" placeholder="15" value={variant.l} onChange={(e) => updateVariant(index, 'l', e.target.value)} className="w-20 px-2 py-2 border rounded-md text-sm text-center" />
-                      </div>
-                      <span className="mb-3 text-muted-foreground">x</span>
-                      <div>
-                        <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Ancho (cm)</label>
-                        <input type="number" placeholder="10" value={variant.w} onChange={(e) => updateVariant(index, 'w', e.target.value)} className="w-20 px-2 py-2 border rounded-md text-sm text-center" />
-                      </div>
-                      <span className="mb-3 text-muted-foreground">x</span>
-                      <div>
-                        <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Alto (cm)</label>
-                        <input type="number" placeholder="5" value={variant.h} onChange={(e) => updateVariant(index, 'h', e.target.value)} className="w-20 px-2 py-2 border rounded-md text-sm text-center" />
-                      </div>
+                      {['l', 'w', 'h'].map((dim) => (
+                          <div key={dim}>
+                              <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">{dim === 'l' ? 'Largo' : dim === 'w' ? 'Ancho' : 'Alto'} (cm)</label>
+                              <input 
+                                  type="number" 
+                                  placeholder={dim === 'l' ? '15' : dim === 'w' ? '10' : '5'}
+                                  value={variant[dim as keyof typeof variant]} 
+                                  onChange={(e) => updateVariant(index, dim, e.target.value)} 
+                                  className="w-16 px-2 py-2 border rounded-md text-sm text-center" 
+                              />
+                          </div>
+                      ))}
                     </div>
 
+                    {/* Precio (unit_price) */}
                     <div className="flex-1 w-full pl-4 border-l">
                       <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Precio (CLP)</label>
-                      <input type="number" placeholder="$ 5.000" value={variant.price} onChange={(e) => updateVariant(index, 'price', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
+                      <input type="number" placeholder="$ 5000" value={variant.price} onChange={(e) => updateVariant(index, 'price', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
                     </div>
+                    
+                    {/* Stock (stock_quantity) */}
                     <div className="w-24">
                       <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Stock</label>
                       <input type="number" placeholder="Cant." max="999" value={variant.quantity} onChange={(e) => updateVariant(index, 'quantity', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
