@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ArrowLeft, Upload, X, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Upload, X, Plus, Trash2, Star, Check } from "lucide-react"
 
 const CATEGORIES = ["Figuras", "Hogar", "Accesorios", "Arquitectura", "Juguetes", "Arte"]
 
@@ -14,6 +14,7 @@ export default function SubirProducto() {
   const [loading, setLoading] = useState(false)
   const [images, setImages] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [defaultImageIndex, setDefaultImageIndex] = useState(0) // <--- Nuevo estado para la portada
 
   const [formData, setFormData] = useState({
     name: "",
@@ -55,6 +56,17 @@ export default function SubirProducto() {
     }
   }
 
+  // Eliminar imagen de la lista
+  const handleRemoveImage = (indexToRemove: number) => {
+    setImages(images.filter((_, i) => i !== indexToRemove))
+    // Ajustar el índice de la portada si es necesario
+    if (indexToRemove === defaultImageIndex) {
+        setDefaultImageIndex(0)
+    } else if (indexToRemove < defaultImageIndex) {
+        setDefaultImageIndex(defaultImageIndex - 1)
+    }
+  }
+
   // Manejo de Variantes
   const addVariant = () => {
     setVariants([...variants, { l: "", w: "", h: "", price: "", quantity: "" }])
@@ -81,6 +93,14 @@ export default function SubirProducto() {
     }
 
     setLoading(true)
+    
+    // Reordenar imágenes para que la seleccionada como default vaya primero
+    const orderedImages = [...images]
+    if (defaultImageIndex > 0 && defaultImageIndex < orderedImages.length) {
+        const [selected] = orderedImages.splice(defaultImageIndex, 1)
+        orderedImages.unshift(selected)
+    }
+
     try {
       const response = await fetch("/api/products", {
         method: "POST",
@@ -90,10 +110,9 @@ export default function SubirProducto() {
           category: formData.category,
           description: formData.description,
           tags: formData.tags.split(",").map((t) => t.trim()),
-          images,
-          // Aquí formateamos las dimensiones para guardarlas en la BD
+          images: orderedImages, // Enviamos el array ya ordenado
           sizes: variants.map((v) => ({
-            size: `${v.l}x${v.w}x${v.h} cm`, // Guardamos el string formateado
+            size: `${v.l}x${v.w}x${v.h} cm`,
             price: Number(v.price),
             quantity: Number(v.quantity),
           })),
@@ -102,7 +121,7 @@ export default function SubirProducto() {
 
       if (response.ok) {
         alert("¡Producto publicado exitosamente!")
-        router.push("/mis-productos") // Redirigir a la nueva tabla
+        router.push("/mis-productos") 
       }
     } catch (error) {
       alert("Error al subir producto")
@@ -122,7 +141,7 @@ export default function SubirProducto() {
           <h1 className="text-3xl font-bold mb-8">Publicar Nuevo Producto</h1>
 
           <form onSubmit={handleSubmit} className="space-y-8">
-            {/* 1. Info Básica (Igual que antes) */}
+            {/* 1. Info Básica */}
             <div>
               <h2 className="text-xl font-semibold mb-4">Información Básica</h2>
               <div className="grid md:grid-cols-2 gap-4">
@@ -148,23 +167,71 @@ export default function SubirProducto() {
               </div>
             </div>
 
-            {/* 2. Imágenes (Igual que antes) */}
+            {/* 2. Imágenes (ACTUALIZADO) */}
             <div>
-              <h2 className="text-xl font-semibold mb-4">Imágenes</h2>
-              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center relative hover:bg-muted/50">
-                <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                <div className="flex flex-col items-center"><Upload size={32} className="mb-2" /><span>Subir Imágenes</span></div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">Imágenes</h2>
+                <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded-md">
+                    Haz clic en una imagen para seleccionarla como portada
+                </span>
               </div>
+              
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center relative hover:bg-muted/50 transition-colors">
+                <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                <div className="flex flex-col items-center">
+                    {uploading ? <span className="animate-pulse">Subiendo...</span> : (
+                        <>
+                            <Upload size={32} className="mb-2 text-muted-foreground" />
+                            <span>Arrastra o haz clic para subir imágenes</span>
+                        </>
+                    )}
+                </div>
+              </div>
+
               {images.length > 0 && (
-                <div className="mt-4 grid grid-cols-4 gap-4">
+                <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {images.map((url, i) => (
-                    <div key={i} className="relative aspect-square"><img src={url} className="object-cover w-full h-full rounded-md" /></div>
+                    <div 
+                        key={i} 
+                        onClick={() => setDefaultImageIndex(i)}
+                        className={`relative aspect-square group rounded-lg overflow-hidden border-2 cursor-pointer transition-all duration-200 ${
+                            i === defaultImageIndex 
+                                ? "border-primary ring-2 ring-primary/20 shadow-md scale-[1.02]" 
+                                : "border-transparent hover:border-muted-foreground/30"
+                        }`}
+                    >
+                        <img src={url} className="object-cover w-full h-full" alt={`Imagen ${i}`} />
+                        
+                        {/* Indicador de Portada */}
+                        <div className={`absolute inset-x-0 bottom-0 py-1.5 text-center text-xs font-bold text-white transition-all ${
+                            i === defaultImageIndex 
+                                ? "bg-primary opacity-100" 
+                                : "bg-black/60 opacity-0 group-hover:opacity-100 translation-y-full group-hover:translate-y-0"
+                        }`}>
+                            {i === defaultImageIndex ? (
+                                <span className="flex items-center justify-center gap-1"><Star size={10} fill="currentColor" /> Portada</span>
+                            ) : "Elegir como Portada"}
+                        </div>
+
+                        {/* Botón Eliminar */}
+                        <button 
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                handleRemoveImage(i)
+                            }}
+                            className="absolute top-1 right-1 bg-red-500/90 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                            title="Eliminar imagen"
+                        >
+                            <X size={12} />
+                        </button>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* 3. Dimensiones y Precios (MODIFICADO) */}
+            {/* 3. Dimensiones y Precios */}
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold">Variantes por Tamaño</h2>
@@ -174,7 +241,6 @@ export default function SubirProducto() {
               <div className="space-y-3">
                 {variants.map((variant, index) => (
                   <div key={index} className="flex flex-col md:flex-row gap-3 items-end bg-muted/30 p-4 rounded-lg border">
-                    {/* Inputs de Dimensiones */}
                     <div className="flex gap-2 items-end">
                       <div>
                         <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Largo (cm)</label>
@@ -192,7 +258,6 @@ export default function SubirProducto() {
                       </div>
                     </div>
 
-                    {/* Precio y Stock */}
                     <div className="flex-1 w-full pl-4 border-l">
                       <label className="text-[10px] uppercase text-muted-foreground font-bold mb-1 block">Precio (CLP)</label>
                       <input type="number" placeholder="$ 5.000" value={variant.price} onChange={(e) => updateVariant(index, 'price', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
