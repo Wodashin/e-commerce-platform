@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { Loader2, Mail, Calendar, Package, Edit, Plus, User, Trash2, ExternalLink } from "lucide-react"
+import { Loader2, Mail, Calendar, Package, Edit, Plus, User, Trash2, ExternalLink, Settings } from "lucide-react"
 
 export default function ProfilePage() {
   const supabase = createClient()
@@ -23,7 +23,6 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState("")
 
-  // Función para cargar datos (exportada para poder reusarla)
   const fetchData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -33,7 +32,6 @@ export default function ProfilePage() {
         return
       }
 
-      // 1. Cargar Perfil
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -44,14 +42,12 @@ export default function ProfilePage() {
         setProfile(profileData)
         setEditName(profileData.full_name || "")
         
-        // 2. Cargar Productos (Forzando respuesta fresca)
         const { data: userProducts } = await supabase
           .from('products')
           .select('*')
           .eq('seller_id', user.id)
           .order('created_at', { ascending: false })
         
-        console.log("Productos encontrados:", userProducts) // Para depuración en consola
         setProducts(userProducts || [])
       }
     } catch (error) {
@@ -68,7 +64,7 @@ export default function ProfilePage() {
   const handleDeleteProduct = async (id: string) => {
     if(!confirm("¿Borrar producto permanentemente?")) return;
     await supabase.from('products').delete().eq('id', id)
-    fetchData() // Recargar lista
+    fetchData() 
   }
 
   const handleUpdateProfile = async () => {
@@ -129,14 +125,24 @@ export default function ProfilePage() {
           </TabsList>
 
           <TabsContent value="products" className="space-y-6">
-            <div className="flex justify-between items-center bg-muted/20 p-4 rounded-lg border">
+            {/* Barra de Acciones */}
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-muted/20 p-4 rounded-lg border gap-4">
               <div>
-                <h3 className="font-semibold">Gestión de Inventario</h3>
-                <p className="text-sm text-muted-foreground">Administra tus productos activos</p>
+                <h3 className="font-semibold">Gestión Rápida</h3>
+                <p className="text-sm text-muted-foreground">Vista previa de tus últimos productos</p>
               </div>
-              <Button asChild>
-                <Link href="/subir-producto"><Plus className="w-4 h-4 mr-2" /> Publicar Nuevo</Link>
-              </Button>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <Button variant="outline" className="flex-1 sm:flex-none" asChild>
+                    <Link href="/mis-productos">
+                        <Settings className="w-4 h-4 mr-2" /> Gestión de Inventario
+                    </Link>
+                </Button>
+                <Button className="flex-1 sm:flex-none" asChild>
+                    <Link href="/subir-producto">
+                        <Plus className="w-4 h-4 mr-2" /> Publicar Nuevo
+                    </Link>
+                </Button>
+              </div>
             </div>
 
             {products.length === 0 ? (
@@ -154,8 +160,13 @@ export default function ProfilePage() {
                         <Image src={product.images[0]} alt={product.name} fill className="object-cover" />
                       )}
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => handleDeleteProduct(product.id)}>
-                          <Trash2 className="w-4 h-4 text-red-500" />
+                        <Button size="icon" variant="secondary" className="h-8 w-8" asChild>
+                            <Link href={`/editar-producto/${product.id}`}>
+                                <Edit className="w-4 h-4" />
+                            </Link>
+                        </Button>
+                        <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => handleDeleteProduct(product.id)}>
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
@@ -165,9 +176,14 @@ export default function ProfilePage() {
                         <Badge variant="secondary">{product.category}</Badge>
                         <span className="font-bold text-green-600">${product.price?.toLocaleString()}</span>
                       </div>
-                      <Button variant="ghost" size="sm" className="w-full mt-4" asChild>
-                        <Link href={`/producto/${product.id}`}>Ver Publicación <ExternalLink className="w-3 h-3 ml-2" /></Link>
-                      </Button>
+                      <div className="flex gap-2 mt-4">
+                        <Button variant="outline" size="sm" className="flex-1" asChild>
+                            <Link href={`/editar-producto/${product.id}`}>Editar</Link>
+                        </Button>
+                        <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/producto/${product.id}`}><ExternalLink className="w-4 h-4" /></Link>
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
