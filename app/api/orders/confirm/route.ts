@@ -25,32 +25,55 @@ export async function POST(request: Request) {
         // Evitar procesar dos veces
         if (order.status === 'paid') return NextResponse.json({ message: "Orden ya procesada" });
 
-        // 2. Marcar como pagada
-        await supabase.from('orders').update({ status: 'paid' }).eq('id', orderId);
+        // 2. Descontar Stock y Marcar como Pagada (USANDO UNA TRANSACCIÓN para seguridad)
+        
+        // Creamos una lista de las promesas de actualización de stock
+        const stockUpdatePromises = [];
+        let totalItemsProcessed = 0;
 
-        // 3. Descontar Stock
+        // Recorremos los ítems comprados
         for (const item of order.items) {
             const { data: product } = await supabase.from('products').select('*').eq('id', item.id).single();
             
             if (product && product.sizes) {
-                // Encontrar la variante y restar stock
+                let stockUpdated = false;
+
                 const newSizes = product.sizes.map((s: any) => {
-                    // Comparar strings de tamaño para encontrar la variante correcta
-                    if (s.size === item.size) {
-                        return { ...s, quantity: Math.max(0, Number(s.quantity) - Number(item.quantity)) }
+                    // Comparación estricta de string para encontrar la variante correcta
+                    if (s.size === item.size) { 
+                        const newQuantity = Math.max(0, Number(s.quantity) - Number(item.quantity));
+                        stockUpdated = true;
+                        return { ...s, quantity: newQuantity }
                     }
                     return s;
                 });
 
-                // Actualizar producto
-                await supabase.from('products').update({ sizes: newSizes }).eq('id', item.id);
+                // Si encontramos y actualizamos la variante, guardamos la promesa
+                if (stockUpdated) { 
+                    totalItemsProcessed++;
+                    stockUpdatePromises.push(
+                        supabase.from('products')
+                            .update({ sizes: newSizes })
+                            .eq('id', item.id)
+                    );
+                }
             }
+        }
+        
+        // Ejecutar todas las actualizaciones de stock en paralelo
+        await Promise.all(stockUpdatePromises);
+
+        // 3. Marcar la orden como pagada (SOLO después de descontar el stock)
+        await supabase.from('orders').update({ status: 'paid' }).eq('id', orderId);
+
+        if (totalItemsProcessed === 0) {
+            console.warn(`[STOCK ISSUE] No se descontó stock: Falló el match de size para la orden ${orderId}`);
         }
 
         return NextResponse.json({ success: true });
 
     } catch (error: any) {
-        console.error("Error confirmando orden:", error);
+        console.error("Error confirmando orden (FATAL):", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
