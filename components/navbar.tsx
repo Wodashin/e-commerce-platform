@@ -27,26 +27,62 @@ export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
+  
+  // Estados de permisos
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isVendor, setIsVendor] = useState(false)
 
   useEffect(() => {
-    const getUser = async () => {
+    const checkUserAndRole = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-      // Verificar si es el admin específico
-      if (user && user.email?.toLowerCase().includes("ilyon3d")) {
-        setIsAdmin(true)
+
+      if (user) {
+        // 1. Verificar si es Admin por email
+        const adminEmail = "ilyon3d@gmail.com" // Ajusta si es diferente
+        const isUserAdmin = user.email?.toLowerCase().includes("ilyon3d")
+        setIsAdmin(!!isUserAdmin)
+
+        // 2. Verificar Rol en base de datos
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+        
+        // Es vendedor si el rol es 'vendor' O si es el admin supremo
+        if (profile?.role === 'vendor' || isUserAdmin) {
+          setIsVendor(true)
+        } else {
+          setIsVendor(false)
+        }
       }
     }
     
-    getUser()
+    checkUserAndRole()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user?.email?.toLowerCase().includes("ilyon3d")) {
-        setIsAdmin(true)
+      
+      if (session?.user) {
+        const isUserAdmin = session.user.email?.toLowerCase().includes("ilyon3d")
+        setIsAdmin(!!isUserAdmin)
+        
+        // Volver a chequear el perfil al cambiar estado
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+          
+        if (profile?.role === 'vendor' || isUserAdmin) {
+          setIsVendor(true)
+        } else {
+          setIsVendor(false)
+        }
       } else {
         setIsAdmin(false)
+        setIsVendor(false)
       }
       
       if (_event === 'SIGNED_OUT') {
@@ -118,6 +154,7 @@ export function Navbar() {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     
+                    {/* Solo Admin ve esto */}
                     {isAdmin && (
                       <DropdownMenuItem asChild className="text-orange-600 focus:text-orange-700 bg-orange-50 focus:bg-orange-100">
                         <Link href="/admin">
@@ -133,12 +170,17 @@ export function Navbar() {
                         <span>Mi Perfil</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/subir-producto">
-                        <ShoppingBag className="mr-2 h-4 w-4" />
-                        <span>Vender Producto</span>
-                      </Link>
-                    </DropdownMenuItem>
+
+                    {/* Solo Vendedores o Admin ven esto */}
+                    {isVendor && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/subir-producto">
+                          <ShoppingBag className="mr-2 h-4 w-4" />
+                          <span>Vender Producto</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut}>
                       <LogOut className="mr-2 h-4 w-4" />
@@ -180,6 +222,13 @@ export function Navbar() {
                     <Button variant="ghost" className="justify-start font-bold" asChild>
                       <Link href="/perfil">Mi Perfil</Link>
                     </Button>
+                    
+                    {isVendor && (
+                      <Button variant="ghost" className="justify-start" asChild>
+                        <Link href="/subir-producto">Vender Producto</Link>
+                      </Button>
+                    )}
+
                     <Button variant="ghost" className="justify-start text-red-500" onClick={handleSignOut}>
                       Cerrar Sesión
                     </Button>
