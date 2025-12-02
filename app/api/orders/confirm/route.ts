@@ -8,13 +8,13 @@ export async function POST(request: Request) {
         const { orderId } = await request.json();
         
         // 1. INICIAR CLIENTE ADMIN (Service Role Key)
-        // ESTO BYPASSEA RLS y permite actualizar el stock
+        // Usamos la clave de administrador para saltar el RLS y poder actualizar el inventario
         const supabaseAdmin = createAdminClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY! // <-- Usamos la clave de alto privilegio
+            process.env.SUPABASE_SERVICE_ROLE_KEY! 
         );
 
-        // 2. Obtener la orden y el producto usando el cliente Admin
+        // 2. Obtener la orden
         const { data: order, error: fetchError } = await supabaseAdmin
             .from('orders')
             .select('*')
@@ -24,12 +24,17 @@ export async function POST(request: Request) {
         if (fetchError || !order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
         if (order.status === 'paid') return NextResponse.json({ message: "Orden ya procesada" });
 
-        // 3. Descontar Stock y Marcar como Pagada
-        
+        // 3. Preparar ítems: Limpiamos el string de tamaño del ítem que viene en la orden
+        const cleanOrderItems = order.items.map((item: any) => ({
+            ...item,
+            size: String(item.size || '').trim() // Aseguramos que sea string y eliminamos espacios
+        }));
+
         const stockUpdatePromises = [];
         let totalItemsProcessed = 0;
 
-        for (const item of order.items) {
+        // 4. Recorrer los ítems y buscar la variante para descontar
+        for (const item of cleanOrderItems) {
             // Obtenemos el producto actual
             const { data: product } = await supabaseAdmin.from('products').select('*').eq('id', item.id).single();
             
@@ -37,20 +42,26 @@ export async function POST(request: Request) {
                 let stockUpdated = false;
 
                 const newSizes = product.sizes.map((s: any) => {
-                    // Si encontramos la variante por tamaño
-                    if (s.size === item.size) { 
-                        const newQuantity = Math.max(0, Number(s.quantity) - Number(item.quantity));
+                    // Limpiamos el string de la DB antes de comparar
+                    const cleanProductSize = String(s.size || '').trim();
+
+                    // ¡Comparación CRÍTICA! Usamos los strings LIMPIOS
+                    if (cleanProductSize === item.size) { 
+                        const currentQuantity = Number(s.quantity) || 0;
+                        const purchasedQuantity = Number(item.quantity) || 1;
+                        
+                        const newQuantity = Math.max(0, currentQuantity - purchasedQuantity);
+                        
                         stockUpdated = true;
                         return { ...s, quantity: newQuantity }
                     }
                     return s;
                 });
 
-                // Si encontramos la variante, generamos la promesa de actualización
                 if (stockUpdated) { 
                     totalItemsProcessed++;
                     stockUpdatePromises.push(
-                        supabaseAdmin.from('products') // <-- Usamos Admin Client para el UPDATE
+                        supabaseAdmin.from('products')
                             .update({ sizes: newSizes })
                             .eq('id', item.id)
                     );
@@ -58,10 +69,10 @@ export async function POST(request: Request) {
             }
         }
         
-        // Ejecutar todas las actualizaciones de stock
+        // 5. Ejecutar todas las actualizaciones de stock
         await Promise.all(stockUpdatePromises);
 
-        // 4. Marcar la orden como pagada
+        // 6. Marcar la orden como pagada (SOLO después de descontar el stock)
         await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderId);
 
         return NextResponse.json({ success: true });
