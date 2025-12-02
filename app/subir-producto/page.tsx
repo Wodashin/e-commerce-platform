@@ -185,15 +185,16 @@ export default function SubirProducto() {
               <div className="space-y-2">
                 {variants.map((v, i) => (
                   <div key={i} className="flex gap-2 items-center bg-muted/20 p-2 rounded">
-                    <input type="number" placeholder="Largo" value={v.l} onChange={(e) => updateVariant(i, 'l', e.target.value)} className="w-16 border p-1 rounded text-center" />
+                    {/* AQUI LOS CAMBIOS: step="0.1" para permitir decimales */}
+                    <input type="number" step="0.1" min="0" placeholder="Largo" value={v.l} onChange={(e) => updateVariant(i, 'l', e.target.value)} className="w-16 border p-1 rounded text-center" />
                     <span>x</span>
-                    <input type="number" placeholder="Ancho" value={v.w} onChange={(e) => updateVariant(i, 'w', e.target.value)} className="w-16 border p-1 rounded text-center" />
+                    <input type="number" step="0.1" min="0" placeholder="Ancho" value={v.w} onChange={(e) => updateVariant(i, 'w', e.target.value)} className="w-16 border p-1 rounded text-center" />
                     <span>x</span>
-                    <input type="number" placeholder="Alto" value={v.h} onChange={(e) => updateVariant(i, 'h', e.target.value)} className="w-16 border p-1 rounded text-center" />
+                    <input type="number" step="0.1" min="0" placeholder="Alto" value={v.h} onChange={(e) => updateVariant(i, 'h', e.target.value)} className="w-16 border p-1 rounded text-center" />
                     <span className="text-sm text-muted-foreground">cm</span>
                     
-                    <input type="number" placeholder="Precio" value={v.price} onChange={(e) => updateVariant(i, 'price', e.target.value)} className="w-24 border p-1 rounded" />
-                    <input type="number" placeholder="Stock" value={v.quantity} onChange={(e) => updateVariant(i, 'quantity', e.target.value)} className="w-20 border p-1 rounded" />
+                    <input type="number" min="0" placeholder="Precio" value={v.price} onChange={(e) => updateVariant(i, 'price', e.target.value)} className="w-24 border p-1 rounded" />
+                    <input type="number" min="0" placeholder="Stock" value={v.quantity} onChange={(e) => updateVariant(i, 'quantity', e.target.value)} className="w-20 border p-1 rounded" />
                     
                     {variants.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => removeVariant(i)}><Trash2 className="w-4 h-4 text-red-500"/></Button>}
                   </div>
