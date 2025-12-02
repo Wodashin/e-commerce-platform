@@ -5,13 +5,14 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
+import { CartProvider } from "@/context/cart-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Marketplace 3D Chile - Productos únicos impresos en 3D",
-  description: "Descubre y compra productos únicos impresos en 3D en Chile. Figuras, accesorios, decoración y más.",
-    generator: 'v0.app'
+  title: "Marketplace 3D Chile",
+  description: "Descubre y compra productos únicos impresos en 3D en Chile.",
+  generator: 'v0.app'
 }
 
 export default function RootLayout({
@@ -23,9 +24,11 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <Navbar />
-          <main>{children}</main>
-          <Footer />
+          <CartProvider>
+            <Navbar />
+            <main>{children}</main>
+            <Footer />
+          </CartProvider>
         </ThemeProvider>
       </body>
     </html>
