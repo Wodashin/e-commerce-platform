@@ -23,6 +23,21 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState("")
 
+  // Lógica de cálculo de stock y precio (Reusable)
+  const calculateTotals = (product: any) => {
+    const variants = product.product_variants || [];
+    
+    const totalStock = variants.reduce((acc: number, curr: any) => 
+      acc + (Number(curr.stock_quantity) || 0), 0
+    );
+
+    const minPrice = variants.length > 0 
+      ? Math.min(...variants.map((v: any) => Number(v.unit_price))) 
+      : (product.price || 0);
+
+    return { totalStock, minPrice };
+  }
+
   const fetchData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -42,9 +57,10 @@ export default function ProfilePage() {
         setProfile(profileData)
         setEditName(profileData.full_name || "")
         
+        // QUERY CORREGIDA: Hacemos JOIN con product_variants para obtener el stock
         const { data: userProducts } = await supabase
           .from('products')
-          .select('*')
+          .select('*, product_variants(*)') // <-- NUEVO: Traemos todas las variantes
           .eq('seller_id', user.id)
           .order('created_at', { ascending: false })
         
@@ -63,6 +79,7 @@ export default function ProfilePage() {
 
   const handleDeleteProduct = async (id: string) => {
     if(!confirm("¿Borrar producto permanentemente?")) return;
+    // Si la tabla product_variants tiene ON DELETE CASCADE, esto borra las variantes.
     await supabase.from('products').delete().eq('id', id)
     fetchData() 
   }
@@ -153,40 +170,45 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((product) => (
-                  <Card key={product.id} className="group overflow-hidden hover:border-primary/50 transition-all">
-                    <div className="relative aspect-video bg-muted">
-                      {product.images?.[0] && (
-                        <Image src={product.images[0]} alt={product.name} fill className="object-cover" />
-                      )}
-                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button size="icon" variant="secondary" className="h-8 w-8" asChild>
-                            <Link href={`/editar-producto/${product.id}`}>
-                                <Edit className="w-4 h-4" />
-                            </Link>
-                        </Button>
-                        <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => handleDeleteProduct(product.id)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold truncate">{product.name}</h3>
-                      <div className="flex justify-between items-center mt-2">
-                        <Badge variant="secondary">{product.category}</Badge>
-                        <span className="font-bold text-green-600">${product.price?.toLocaleString()}</span>
-                      </div>
-                      <div className="flex gap-2 mt-4">
-                        <Button variant="outline" size="sm" className="flex-1" asChild>
-                            <Link href={`/editar-producto/${product.id}`}>Editar</Link>
-                        </Button>
-                        <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/producto/${product.id}`}><ExternalLink className="w-4 h-4" /></Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {products.map((product) => {
+                    const { totalStock, minPrice } = calculateTotals(product);
+
+                    return (
+                      <Card key={product.id} className="group overflow-hidden hover:border-primary/50 transition-all">
+                        <div className="relative aspect-video bg-muted">
+                          {product.images?.[0] && (
+                            <Image src={product.images[0]} alt={product.name} fill className="object-cover" />
+                          )}
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button size="icon" variant="secondary" className="h-8 w-8" asChild>
+                                <Link href={`/editar-producto/${product.id}`}>
+                                    <Edit className="w-4 h-4" />
+                                </Link>
+                            </Button>
+                            <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => handleDeleteProduct(product.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <CardContent className="p-4">
+                          <h3 className="font-semibold truncate">{product.name}</h3>
+                          <div className="flex justify-between items-center mt-2">
+                            <Badge variant="secondary">{product.category}</Badge>
+                            <span className="font-bold text-green-600">${minPrice?.toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">Stock: {totalStock} un.</p>
+                          <div className="flex gap-2 mt-4">
+                            <Button variant="outline" size="sm" className="flex-1" asChild>
+                                <Link href={`/editar-producto/${product.id}`}>Editar</Link>
+                            </Button>
+                            <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/producto/${product.id}`}><ExternalLink className="w-4 h-4" /></Link>
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                })}
               </div>
             )}
           </TabsContent>
