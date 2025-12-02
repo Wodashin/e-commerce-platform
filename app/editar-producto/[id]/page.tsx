@@ -127,9 +127,15 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const updateVariant = (index: number, field: string, value: string) => {
+    let finalValue = value;
+    if (field === 'quantity' || field === 'price') {
+      const num = Number(value);
+      if (num < 0) finalValue = "0";
+      if (field === 'quantity' && num > 999) finalValue = "999"; //stock maximo de 999
+    }
+
     const newVariants: any = [...variants]
-    if (field === 'quantity' && Number(value) > 999) return;
-    newVariants[index][field] = value
+    newVariants[index][field] = finalValue
     setVariants(newVariants)
   }
 
