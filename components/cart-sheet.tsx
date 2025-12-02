@@ -1,26 +1,40 @@
 "use client"
 
+import { useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react"
+import { ShoppingCart, Trash2, Plus, Minus, CreditCard, Loader2 } from "lucide-react"
 import { useCart } from "@/context/cart-context"
 import Image from "next/image"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 export function CartSheet() {
   const { items, removeItem, updateQuantity, cartTotal, cartCount } = useCart()
+  const [loading, setLoading] = useState(false)
 
-  const handleCheckout = () => {
-    // Generar mensaje detallado para WhatsApp
-    const itemsList = items
-      .map((i) => `• ${i.quantity}x ${i.name} ${i.size ? `(${i.size})` : ""} - $${(i.price * i.quantity).toLocaleString("es-CL")}`)
-      .join("\n")
-    
-    const totalMsg = `\n\n*Total a pagar: $${cartTotal.toLocaleString("es-CL")}*`
-    const finalMsg = `Hola! Quiero realizar el siguiente pedido:\n\n${itemsList}${totalMsg}`
-    
-    // Número por defecto (puedes cambiarlo)
-    window.open(`https://wa.me/56948842564?text=${encodeURIComponent(finalMsg)}`, "_blank")
+  const handleCheckout = async () => {
+    setLoading(true)
+    try {
+        const response = await fetch('/api/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items })
+        })
+        
+        const data = await response.json()
+        
+        if (data.url) {
+            // Redirigir a MercadoPago
+            window.location.href = data.url
+        } else {
+            alert("Error al procesar el pago")
+        }
+    } catch (error) {
+        console.error(error)
+        alert("Ocurrió un error inesperado")
+    } finally {
+        setLoading(false)
+    }
   }
 
   return (
@@ -102,8 +116,9 @@ export function CartSheet() {
                 <span>Total:</span>
                 <span>${cartTotal.toLocaleString("es-CL")}</span>
               </div>
-              <Button className="w-full" size="lg" onClick={handleCheckout}>
-                Finalizar Compra por WhatsApp
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" size="lg" onClick={handleCheckout} disabled={loading}>
+                {loading ? <Loader2 className="animate-spin mr-2" /> : <CreditCard className="mr-2 h-5 w-5" />}
+                {loading ? "Procesando..." : "Pagar con MercadoPago"}
               </Button>
             </div>
           </>
