@@ -1,8 +1,8 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from "next/server"
 
-// GET: Trae productos CON sus variantes (JOIN)
+// GET: Trae productos CON sus variantes
 export async function GET() {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -20,7 +20,7 @@ export async function GET() {
   return NextResponse.json(products)
 }
 
-// POST: Crear SOLO la fila principal del producto
+// POST: Crear producto
 export async function POST(request: Request) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         name: body.name,
         category: body.category,
         description: body.description,
-        price: body.price, // Precio base para mostrar "Desde X"
+        price: body.price,
         images: body.images,
         tags: body.tags,
         seller_id: user.id
@@ -54,9 +54,64 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT: Actualizar solo datos principales
+// PUT: Actualizar producto y sus variantes
 export async function PUT(request: Request) {
-    // Lógica similar al POST pero con .update() y .eq('id', body.id)
-    // (Ya la tenías en versiones anteriores, si la necesitas completa dímelo)
-    return NextResponse.json({ok: true}) // Placeholder para no alargar
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
+    )
+
+    try {
+        const body = await request.json()
+        const { id, name, category, description, tags, images, sizes } = body
+
+        if (!id) throw new Error("ID de producto requerido")
+
+        // 1. Actualizar datos principales del producto
+        const { error: productError } = await supabase
+            .from('products')
+            .update({
+                name,
+                category,
+                description,
+                tags,
+                images,
+                // Actualizamos el precio base (el menor de las variantes)
+                price: Math.min(...sizes.map((s: any) => Number(s.price)))
+            })
+            .eq('id', id)
+
+        if (productError) throw productError
+
+        // 2. Actualizar variantes (Estrategia: Borrar viejas -> Insertar nuevas)
+        // Esto es más seguro que intentar editar una por una
+        const { error: deleteError } = await supabase
+            .from('product_variants')
+            .delete()
+            .eq('product_id', id)
+        
+        if (deleteError) throw deleteError
+
+        // Insertar las nuevas variantes editadas
+        const variantsToInsert = sizes.map((v: any) => ({
+            product_id: id,
+            size_description: v.size, // Asegúrate que venga como texto "LxAxH cm"
+            unit_price: Number(v.price),
+            stock_quantity: Number(v.quantity)
+        }))
+
+        const { error: insertError } = await supabase
+            .from('product_variants')
+            .insert(variantsToInsert)
+
+        if (insertError) throw insertError
+
+        return NextResponse.json({ success: true })
+
+    } catch (error: any) {
+        console.error("Error actualizando:", error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 }
