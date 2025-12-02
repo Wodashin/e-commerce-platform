@@ -1,8 +1,9 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { createClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ArrowLeft, Upload, X, Plus, Trash2, Star, Loader2 } from "lucide-react"
@@ -11,7 +12,10 @@ const CATEGORIES = ["Figuras", "Hogar", "Accesorios", "Arquitectura", "Juguetes"
 
 export default function SubirProducto() {
   const router = useRouter()
+  const supabase = createClient()
+  
   const [loading, setLoading] = useState(false)
+  const [verifying, setVerifying] = useState(true) // Estado para la pantalla de carga inicial
   const [images, setImages] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [defaultImageIndex, setDefaultImageIndex] = useState(0)
@@ -27,6 +31,38 @@ export default function SubirProducto() {
   const [variants, setVariants] = useState([
     { l: "15", w: "10", h: "5", price: "3000", quantity: "1" }
   ])
+
+  // --- NUEVA SEGURIDAD: Verificar Rol al Cargar ---
+  useEffect(() => {
+    const checkPermissions = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        router.push("/") // No logueado -> Fuera
+        return
+      }
+
+      // Verificar si es Admin Supremo
+      const isGodAdmin = user.email?.toLowerCase().includes("ilyon3d")
+
+      // Verificar Rol en Base de Datos
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      // Si NO es vendedor Y NO es admin -> Fuera
+      if (profile?.role !== 'vendor' && !isGodAdmin) {
+        alert("Acceso denegado: Necesitas cuenta de Vendedor.")
+        router.push("/")
+      } else {
+        setVerifying(false) // Permiso concedido, mostramos la página
+      }
+    }
+
+    checkPermissions()
+  }, [router, supabase])
 
   // Subida de imágenes a tu API (R2)
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,6 +142,8 @@ export default function SubirProducto() {
       })
       
       const productData = await resProduct.json()
+      // Si la API rechaza por permisos (403), capturamos el error aquí
+      if (resProduct.status === 403) throw new Error("No tienes permiso para vender.")
       if (!resProduct.ok || !productData.id) throw new Error("Error creando producto principal")
 
       const productId = productData.id
@@ -137,6 +175,11 @@ export default function SubirProducto() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Pantalla de carga mientras verificamos permisos
+  if (verifying) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-primary"/></div>
   }
 
   return (
@@ -185,7 +228,6 @@ export default function SubirProducto() {
               <div className="space-y-2">
                 {variants.map((v, i) => (
                   <div key={i} className="flex gap-2 items-center bg-muted/20 p-2 rounded">
-                    {/* AQUI LOS CAMBIOS: step="0.1" para permitir decimales */}
                     <input type="number" step="0.1" min="0" placeholder="Largo" value={v.l} onChange={(e) => updateVariant(i, 'l', e.target.value)} className="w-16 border p-1 rounded text-center" />
                     <span>x</span>
                     <input type="number" step="0.1" min="0" placeholder="Ancho" value={v.w} onChange={(e) => updateVariant(i, 'w', e.target.value)} className="w-16 border p-1 rounded text-center" />
@@ -210,4 +252,4 @@ export default function SubirProducto() {
       </div>
     </div>
   )
-}
+}v
