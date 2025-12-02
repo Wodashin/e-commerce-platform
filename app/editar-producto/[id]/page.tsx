@@ -6,6 +6,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge" // <--- ¡ESTA LÍNEA FALTABA!
 import { ArrowLeft, Upload, X, Plus, Trash2, Star, Loader2, Save } from "lucide-react"
 
 const CATEGORIES = ["Figuras", "Hogar", "Accesorios", "Arquitectura", "Juguetes", "Arte"]
@@ -194,6 +195,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         <Card className="p-6">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold">Editar Producto</h1>
+            {/* Aquí es donde se usaba Badge y fallaba por falta de import */}
             <Badge variant="outline">ID: {productId?.slice(0, 8)}...</Badge>
           </div>
 
