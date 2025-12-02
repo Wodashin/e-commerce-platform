@@ -2,19 +2,13 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from "next/server"
 
+// GET: Obtener todos los productos
 export async function GET() {
   const cookieStore = await cookies()
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-      },
-    }
+    { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
   )
 
   const { data: products, error } = await supabase
@@ -22,87 +16,95 @@ export async function GET() {
     .select('*, seller:profiles(full_name, avatar_url)')
     .order('created_at', { ascending: false })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(products)
 }
 
+// POST: Crear nuevo producto
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
+  return handleProductAction(request, 'create')
+}
 
+// PUT: Actualizar producto existente
+export async function PUT(request: Request) {
+  return handleProductAction(request, 'update')
+}
+
+// Función auxiliar para manejar Create y Update
+async function handleProductAction(request: Request, action: 'create' | 'update') {
+  const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options })
-          } catch (error) {
-            // Ignorar en Server Components
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.delete({ name, ...options })
-          } catch (error) {
-            // Ignorar
-          }
-        },
+        get(name: string) { return cookieStore.get(name)?.value },
+        set(name: string, value: string, options: CookieOptions) { cookieStore.set({ name, value, ...options }) },
+        remove(name: string, options: CookieOptions) { cookieStore.delete({ name, ...options }) },
       },
     }
   )
 
-  // 1. Verificar quién es el usuario
   const { data: { user }, error: authError } = await supabase.auth.getUser()
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: "No autorizado. Inicia sesión." }, { status: 401 })
-  }
+  if (authError || !user) return NextResponse.json({ error: "No autorizado." }, { status: 401 })
 
   try {
     const body = await request.json()
     
-    // 2. Calcular el precio "principal" (el más barato de las variantes)
-    // Esto sirve para mostrar "Desde $5.000" en la portada
+    // Calcular precio principal (el más bajo)
     let mainPrice = 0;
     if (body.sizes && Array.isArray(body.sizes) && body.sizes.length > 0) {
       mainPrice = Math.min(...body.sizes.map((s: any) => Number(s.price) || 0));
     } else {
-      mainPrice = Number(body.price) || 0;
+      mainPrice = Number(body.price) || 0; // Fallback si no hay sizes
     }
 
-    // 3. Insertar en la base de datos
-    const { data, error } = await supabase
-      .from('products')
-      .insert([
-        {
+    let result;
+
+    if (action === 'create') {
+      const { data, error } = await supabase
+        .from('products')
+        .insert([{
           name: body.name,
           category: body.category,
           description: body.description,
-          price: mainPrice,      // Precio calculado para ordenar/filtrar
-          images: body.images,   // URLs de Cloudflare
+          price: mainPrice,
+          images: body.images,
           tags: body.tags,
-          sizes: body.sizes,     // JSON con tus variantes (Largo, Ancho, Alto...)
-          seller_id: user.id     // Vinculado a TI
-        }
-      ])
-      .select()
+          sizes: body.sizes,
+          seller_id: user.id
+        }])
+        .select()
+      if (error) throw error
+      result = data[0]
 
-    if (error) {
-      console.error("Error Supabase:", error)
-      throw error
+    } else {
+      // Update logic
+      if (!body.id) throw new Error("ID de producto requerido para actualizar")
+      
+      const { data, error } = await supabase
+        .from('products')
+        .update({
+          name: body.name,
+          category: body.category,
+          description: body.description,
+          price: mainPrice, // Recalculamos el precio base por si cambiaron los precios de las variantes
+          images: body.images,
+          tags: body.tags,
+          sizes: body.sizes
+        })
+        .eq('id', body.id)
+        .eq('seller_id', user.id) // Seguridad extra: solo el dueño puede editar
+        .select()
+        
+      if (error) throw error
+      result = data[0]
     }
 
-    return NextResponse.json(data[0], { status: 201 })
+    return NextResponse.json(result, { status: action === 'create' ? 201 : 200 })
 
   } catch (error: any) {
-    console.error("Error general creando producto:", error)
-    return NextResponse.json({ error: error.message || "Error al crear producto" }, { status: 500 })
+    console.error(`Error ${action} product:`, error)
+    return NextResponse.json({ error: error.message || "Error procesando solicitud" }, { status: 500 })
   }
 }
