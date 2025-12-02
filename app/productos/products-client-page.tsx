@@ -160,7 +160,10 @@ export default function ProductsClientPage({ initialProducts }: ProductsClientPa
                         <span className="text-lg font-bold text-green-600">${minPrice.toLocaleString("es-CL")}</span>
                         <p className="text-[10px] text-muted-foreground">desde</p>
                     </div>
-                    <Button size="sm" asChild><Link href={`/producto/${product.id}`}>Ver</Link></Button>
+                    {/* Botón modificado aquí */}
+                    <Button size="sm" asChild>
+                      <Link href={`/producto/${product.id}`}>Ver Detalles</Link>
+                    </Button>
                 </div>
               </CardContent>
             </Card>
