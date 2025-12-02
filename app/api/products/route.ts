@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from "next/server"
 
-// GET: Trae productos CON sus variantes
+// GET: Trae productos (PÚBLICO)
 export async function GET() {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -20,7 +20,7 @@ export async function GET() {
   return NextResponse.json(products)
 }
 
-// POST: Crear producto
+// POST: Crear producto (PROTEGIDO)
 export async function POST(request: Request) {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -31,6 +31,15 @@ export async function POST(request: Request) {
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  // --- SEGURIDAD: Verificar Rol ---
+  const isGodAdmin = user.email?.toLowerCase().includes("ilyon3d")
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  
+  if (profile?.role !== 'vendor' && !isGodAdmin) {
+    return NextResponse.json({ error: "Forbidden: Vendedor requerido" }, { status: 403 })
+  }
+  // ------------------------------
 
   try {
     const body = await request.json()
@@ -54,7 +63,7 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT: Actualizar producto y sus variantes
+// PUT: Actualizar producto (PROTEGIDO)
 export async function PUT(request: Request) {
     const cookieStore = await cookies()
     const supabase = createServerClient(
@@ -63,13 +72,28 @@ export async function PUT(request: Request) {
         { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
     )
 
+    // Verificar usuario
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     try {
         const body = await request.json()
         const { id, name, category, description, tags, images, sizes } = body
 
         if (!id) throw new Error("ID de producto requerido")
 
-        // 1. Actualizar datos principales del producto
+        // VERIFICACIÓN EXTRA: Asegurar que el producto pertenece al usuario (o es admin)
+        // Esto evita que un vendedor edite el producto de OTRO vendedor
+        const isGodAdmin = user.email?.toLowerCase().includes("ilyon3d")
+        
+        if (!isGodAdmin) {
+            const { data: existingProduct } = await supabase.from('products').select('seller_id').eq('id', id).single()
+            if (existingProduct?.seller_id !== user.id) {
+                return NextResponse.json({ error: "No puedes editar productos ajenos" }, { status: 403 })
+            }
+        }
+
+        // 1. Actualizar datos principales
         const { error: productError } = await supabase
             .from('products')
             .update({
@@ -78,34 +102,24 @@ export async function PUT(request: Request) {
                 description,
                 tags,
                 images,
-                // Actualizamos el precio base (el menor de las variantes)
                 price: Math.min(...sizes.map((s: any) => Number(s.price)))
             })
             .eq('id', id)
 
         if (productError) throw productError
 
-        // 2. Actualizar variantes (Estrategia: Borrar viejas -> Insertar nuevas)
-        // Esto es más seguro que intentar editar una por una
-        const { error: deleteError } = await supabase
-            .from('product_variants')
-            .delete()
-            .eq('product_id', id)
-        
+        // 2. Actualizar variantes
+        const { error: deleteError } = await supabase.from('product_variants').delete().eq('product_id', id)
         if (deleteError) throw deleteError
 
-        // Insertar las nuevas variantes editadas
         const variantsToInsert = sizes.map((v: any) => ({
             product_id: id,
-            size_description: v.size, // Asegúrate que venga como texto "LxAxH cm"
+            size_description: v.size,
             unit_price: Number(v.price),
             stock_quantity: Number(v.quantity)
         }))
 
-        const { error: insertError } = await supabase
-            .from('product_variants')
-            .insert(variantsToInsert)
-
+        const { error: insertError } = await supabase.from('product_variants').insert(variantsToInsert)
         if (insertError) throw insertError
 
         return NextResponse.json({ success: true })
