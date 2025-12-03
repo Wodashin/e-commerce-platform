@@ -14,8 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, Mail, Calendar, Package, Edit, Plus, User, Trash2, Settings, ShoppingBag, Store, FileDown } from "lucide-react"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+// NOTA: Se eliminaron los imports estáticos de jspdf aquí también
 
 export default function ProfilePage() {
   const supabase = createClient()
@@ -89,8 +88,6 @@ export default function ProfilePage() {
     ordersList.forEach(order => {
         // Filtrar por mes seleccionado (opcional, aquí simplificado tomamos todo o filtramos en render)
         const orderDate = new Date(order.created_at)
-        // Solo procesar si coincide el mes (lógica simple)
-        // En un sistema real, harías esto más robusto
         
         order.items.forEach((item: any) => {
             // Si soy admin, veo todo. Si soy vendedor, solo mis items.
@@ -110,33 +107,41 @@ export default function ProfilePage() {
     setSalesStats(Object.values(stats))
   }
 
-  // Generar PDF
-  const generatePDF = () => {
-    const doc = new jsPDF()
-    
-    doc.setFontSize(18)
-    doc.text("Reporte de Ventas - Marketplace 3D", 14, 22)
-    doc.setFontSize(11)
-    doc.text(`Generado por: ${profile.full_name}`, 14, 30)
-    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 36)
+  // --- CORRECCIÓN AQUÍ: Importación Dinámica ---
+  const generatePDF = async () => {
+    try {
+      const jsPDF = (await import("jspdf")).default
+      const autoTable = (await import("jspdf-autotable")).default
 
-    const tableData = salesStats.map(stat => [
-        stat.name,
-        stat.quantity,
-        `$${stat.total.toLocaleString("es-CL")}`
-    ])
+      const doc = new jsPDF()
+      
+      doc.setFontSize(18)
+      doc.text("Reporte de Ventas - Marketplace 3D", 14, 22)
+      doc.setFontSize(11)
+      doc.text(`Generado por: ${profile.full_name}`, 14, 30)
+      doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 36)
 
-    // Calcular gran total
-    const grandTotal = salesStats.reduce((acc, curr) => acc + curr.total, 0)
-    tableData.push(["TOTAL FINAL", "", `$${grandTotal.toLocaleString("es-CL")}`])
+      const tableData = salesStats.map(stat => [
+          stat.name,
+          stat.quantity,
+          `$${stat.total.toLocaleString("es-CL")}`
+      ])
 
-    autoTable(doc, {
-        head: [['Producto / Variante', 'Cantidad Vendida', 'Total Ingresos']],
-        body: tableData,
-        startY: 44,
-    })
+      // Calcular gran total
+      const grandTotal = salesStats.reduce((acc, curr) => acc + curr.total, 0)
+      tableData.push(["TOTAL FINAL", "", `$${grandTotal.toLocaleString("es-CL")}`])
 
-    doc.save(`reporte_ventas_${new Date().toISOString().slice(0,10)}.pdf`)
+      autoTable(doc, {
+          head: [['Producto / Variante', 'Cantidad Vendida', 'Total Ingresos']],
+          body: tableData,
+          startY: 44,
+      })
+
+      doc.save(`reporte_ventas_${new Date().toISOString().slice(0,10)}.pdf`)
+    } catch (error) {
+      console.error("Error generando PDF", error)
+      alert("No se pudo generar el PDF. Por favor intenta de nuevo.")
+    }
   }
 
   useEffect(() => { fetchData() }, [])
@@ -257,7 +262,6 @@ export default function ProfilePage() {
                         <Button className="bg-green-600 hover:bg-green-700" asChild><Link href="/subir-producto">Nuevo</Link></Button>
                     </div>
                 </div>
-                {/* ... (Aquí iría el grid de productos como en el código anterior) ... */}
             </TabsContent>
           )}
 
