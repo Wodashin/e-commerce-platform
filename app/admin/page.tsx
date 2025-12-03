@@ -9,8 +9,19 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CheckCircle, XCircle, Loader2, ShieldAlert, FileDown, TrendingUp } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+// NOTA: Se eliminaron los imports estáticos de jspdf aquí para evitar el error
+
+// Importaciones para los gráficos
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Cell 
+} from 'recharts';
 
 export default function AdminPanel() {
   const supabase = createClient()
@@ -67,18 +78,27 @@ export default function AdminPanel() {
     setSalesStats(Object.values(stats))
   }
 
-  const generateAdminPDF = () => {
-    const doc = new jsPDF()
-    doc.text("Reporte GLOBAL de Ventas - Admin", 14, 22)
-    doc.setFontSize(10)
-    doc.text(`Generado el: ${new Date().toLocaleString()}`, 14, 30)
+  // --- CORRECCIÓN AQUÍ: Importación Dinámica ---
+  const generateAdminPDF = async () => {
+    try {
+      const jsPDF = (await import("jspdf")).default
+      const autoTable = (await import("jspdf-autotable")).default
 
-    const tableData = salesStats.map(s => [s.name, s.quantity, `$${s.total.toLocaleString("es-CL")}`])
-    const grandTotal = salesStats.reduce((a,b)=>a+b.total,0)
-    tableData.push(["TOTAL PLATAFORMA", "", `$${grandTotal.toLocaleString("es-CL")}`])
+      const doc = new jsPDF()
+      doc.text("Reporte GLOBAL de Ventas - Admin", 14, 22)
+      doc.setFontSize(10)
+      doc.text(`Generado el: ${new Date().toLocaleString()}`, 14, 30)
 
-    autoTable(doc, { head: [['Producto', 'Cant.', 'Total']], body: tableData, startY: 40 })
-    doc.save("reporte_admin_global.pdf")
+      const tableData = salesStats.map(s => [s.name, s.quantity, `$${s.total.toLocaleString("es-CL")}`])
+      const grandTotal = salesStats.reduce((a,b)=>a+b.total,0)
+      tableData.push(["TOTAL PLATAFORMA", "", `$${grandTotal.toLocaleString("es-CL")}`])
+
+      autoTable(doc, { head: [['Producto', 'Cant.', 'Total']], body: tableData, startY: 40 })
+      doc.save("reporte_admin_global.pdf")
+    } catch (error) {
+      console.error("Error generando PDF", error)
+      alert("Hubo un error al generar el PDF. Intenta nuevamente.")
+    }
   }
 
   const handleDecision = async (userId: string, approved: boolean) => {
@@ -116,69 +136,4 @@ export default function AdminPanel() {
             {/* Pestaña Solicitudes */}
             <TabsContent value="requests" className="space-y-4">
                 {requests.length === 0 ? (
-                    <Card><CardContent className="p-12 text-center text-muted-foreground">No hay solicitudes pendientes.</CardContent></Card>
-                ) : (
-                    requests.map((req) => (
-                    <Card key={req.id}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <div>
-                            <CardTitle>{req.business_info?.businessName || "Sin nombre"}</CardTitle>
-                            <p className="text-sm text-muted-foreground">Usuario: {req.full_name} ({req.email})</p>
-                        </div>
-                        <Badge className="bg-yellow-100 text-yellow-800">Pendiente</Badge>
-                        </CardHeader>
-                        <CardContent>
-                        <div className="flex gap-4">
-                            <Button className="flex-1 bg-green-600" onClick={() => handleDecision(req.id, true)}><CheckCircle className="w-4 h-4 mr-2" /> Aprobar</Button>
-                            <Button variant="destructive" className="flex-1" onClick={() => handleDecision(req.id, false)}><XCircle className="w-4 h-4 mr-2" /> Rechazar</Button>
-                        </div>
-                        </CardContent>
-                    </Card>
-                    ))
-                )}
-            </TabsContent>
-
-            {/* Pestaña Financiera (NUEVA) */}
-            <TabsContent value="finance">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex justify-between items-center">
-                            <div className="flex items-center gap-2"><TrendingUp className="text-green-600"/> Transparencia Financiera</div>
-                            <Button variant="outline" onClick={generateAdminPDF} disabled={salesStats.length === 0}>
-                                <FileDown className="w-4 h-4 mr-2" /> Descargar Reporte Oficial
-                            </Button>
-                        </CardTitle>
-                        <CardDescription>Resumen consolidado de todas las ventas de la plataforma.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Producto</TableHead>
-                                    <TableHead className="text-center">Unidades</TableHead>
-                                    <TableHead className="text-right">Volumen Total</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {salesStats.map((stat, idx) => (
-                                    <TableRow key={idx}>
-                                        <TableCell>{stat.name}</TableCell>
-                                        <TableCell className="text-center">{stat.quantity}</TableCell>
-                                        <TableCell className="text-right font-mono">${stat.total.toLocaleString("es-CL")}</TableCell>
-                                    </TableRow>
-                                ))}
-                                <TableRow className="bg-muted font-bold text-lg">
-                                    <TableCell>TOTAL ACUMULADO</TableCell>
-                                    <TableCell className="text-center">{salesStats.reduce((a,b)=>a+b.quantity,0)}</TableCell>
-                                    <TableCell className="text-right text-green-700">${salesStats.reduce((a,b)=>a+b.total,0).toLocaleString("es-CL")}</TableCell>
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  )
-}
+                    <Card><CardContent className="p-1
