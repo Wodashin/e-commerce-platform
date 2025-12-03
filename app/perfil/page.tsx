@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, Mail, Calendar, Package, Edit, Plus, User, Trash2, Settings, ShoppingBag, Store, FileDown } from "lucide-react"
-// NOTA: Se eliminaron los imports estáticos de jspdf aquí también
+import { toast } from "sonner"
 
 export default function ProfilePage() {
   const supabase = createClient()
@@ -58,10 +58,11 @@ export default function ProfilePage() {
             // Ventas (Buscamos en todas las órdenes pagadas)
             // Filtramos en JS los items que pertenecen a este vendedor
             const { data: allPaidOrders } = await supabase
-                .from('orders')
-                .select('*')
-                .eq('status', 'paid')
-                .order('created_at', { ascending: false })
+              .from('orders')
+              .select('items, total_amount, created_at')
+              .eq('status', 'paid')
+              .order('created_at', { ascending: false })
+              .limit(100)
 
             processSales(allPaidOrders || [], user.id, isUserAdmin ? 'admin' : 'vendor')
         }
@@ -110,39 +111,73 @@ export default function ProfilePage() {
   // --- CORRECCIÓN AQUÍ: Importación Dinámica ---
   const generatePDF = async () => {
     try {
-      const jsPDF = (await import("jspdf")).default
-      const autoTable = (await import("jspdf-autotable")).default
+      // 1. Mostrar feedback de carga (opcional, podrías poner un estado setLoadingPDF)
+      const toastId = toast.loading("Generando reporte completo...")
 
-      const doc = new jsPDF()
+      // 2. IMPORTANTE: Consultar TODAS las ventas aquí, solo cuando se pide el PDF
+      const { data: fullHistory } = await supabase
+          .from('orders')
+          .select('items, total_amount, created_at')
+          .eq('status', 'paid')
+          .order('created_at', { ascending: false }) 
+          // ¡Aquí NO ponemos .limit()! Queremos todo.
+
+      // 3. Procesar los datos completos (reutilizamos tu lógica o la adaptamos por mes)
+      const reportStats: Record<string, any> = {}
       
-      doc.setFontSize(18)
-      doc.text("Reporte de Ventas - Marketplace 3D", 14, 22)
-      doc.setFontSize(11)
-      doc.text(`Generado por: ${profile.full_name}`, 14, 30)
-      doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 36)
-
-      const tableData = salesStats.map(stat => [
-          stat.name,
-          stat.quantity,
-          `$${stat.total.toLocaleString("es-CL")}`
-      ])
-
-      // Calcular gran total
-      const grandTotal = salesStats.reduce((acc, curr) => acc + curr.total, 0)
-      tableData.push(["TOTAL FINAL", "", `$${grandTotal.toLocaleString("es-CL")}`])
-
-      autoTable(doc, {
-          head: [['Producto / Variante', 'Cantidad Vendida', 'Total Ingresos']],
-          body: tableData,
-          startY: 44,
+      // Lógica para agrupar por MES y PRODUCTO
+      fullHistory?.forEach(order => {
+          const date = new Date(order.created_at)
+          const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}` // Ej: "2024-12"
+          
+          order.items.forEach((item: any) => {
+             // Verificar si el ítem es tuyo (o si eres admin)
+             const isMine = profile.role === 'vendor' ? item.sellerId === profile.id : true;
+             // Si eres admin "ilyon3d", isMine siempre true o lógica similar
+             
+             if (isMine) {
+                 const key = `${monthKey}_${item.name} (${item.size || 'Unico'})`
+                 if (!reportStats[key]) {
+                     reportStats[key] = { 
+                         month: monthKey,
+                         name: item.name + (item.size ? ` (${item.size})` : ''),
+                         quantity: 0, 
+                         total: 0 
+                     }
+                 }
+                 reportStats[key].quantity += Number(item.quantity)
+                 reportStats[key].total += Number(item.price) * Number(item.quantity)
+             }
+          })
       })
 
-      doc.save(`reporte_ventas_${new Date().toISOString().slice(0,10)}.pdf`)
+      // 4. Generar el PDF con jspdf
+      const jsPDF = (await import("jspdf")).default
+      const autoTable = (await import("jspdf-autotable")).default
+      const doc = new jsPDF()
+
+      doc.text("Reporte Histórico de Ventas", 14, 20)
+      
+      // Ordenar para la tabla: Primero por Mes, luego por Nombre
+      const tableData = Object.values(reportStats)
+          .sort((a, b) => a.month.localeCompare(b.month) || a.name.localeCompare(b.name))
+          .map(s => [s.month, s.name, s.quantity, `$${s.total.toLocaleString("es-CL")}`])
+
+      autoTable(doc, { 
+          head: [['Mes', 'Producto', 'Cant.', 'Total']], 
+          body: tableData,
+          startY: 30
+      })
+
+      doc.save("reporte_ventas_completo.pdf")
+      toast.dismiss(toastId)
+      toast.success("Reporte descargado")
+
     } catch (error) {
-      console.error("Error generando PDF", error)
-      alert("No se pudo generar el PDF. Por favor intenta de nuevo.")
+      console.error("Error PDF", error)
+      toast.error("Error al generar PDF")
     }
-  }
+}
 
   useEffect(() => { fetchData() }, [])
 
