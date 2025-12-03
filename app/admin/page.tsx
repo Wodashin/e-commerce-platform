@@ -136,4 +136,103 @@ export default function AdminPanel() {
             {/* Pestaña Solicitudes */}
             <TabsContent value="requests" className="space-y-4">
                 {requests.length === 0 ? (
-                    <Card><CardContent className="p-1
+                    <Card><CardContent className="p-12 text-center text-muted-foreground">No hay solicitudes pendientes.</CardContent></Card>
+                ) : (
+                    requests.map((req) => (
+                    <Card key={req.id}>
+                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <div>
+                            <CardTitle>{req.business_info?.businessName || "Sin nombre"}</CardTitle>
+                            <p className="text-sm text-muted-foreground">Usuario: {req.full_name} ({req.email})</p>
+                        </div>
+                        <Badge className="bg-yellow-100 text-yellow-800">Pendiente</Badge>
+                        </CardHeader>
+                        <CardContent>
+                        <div className="flex gap-4">
+                            <Button className="flex-1 bg-green-600" onClick={() => handleDecision(req.id, true)}><CheckCircle className="w-4 h-4 mr-2" /> Aprobar</Button>
+                            <Button variant="destructive" className="flex-1" onClick={() => handleDecision(req.id, false)}><XCircle className="w-4 h-4 mr-2" /> Rechazar</Button>
+                        </div>
+                        </CardContent>
+                    </Card>
+                    ))
+                )}
+            </TabsContent>
+
+            {/* Pestaña Financiera */}
+            <TabsContent value="finance">
+                {/* GRÁFICO VISUAL (Agregado de paso anterior) */}
+                <Card className="mb-8">
+                  <CardHeader>
+                    <CardTitle>Resumen Visual de Ventas</CardTitle>
+                    <CardDescription>Rendimiento por producto</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={salesStats}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="name" 
+                          tick={{fontSize: 10}} 
+                          interval={0} 
+                          angle={-45} 
+                          textAnchor="end" 
+                          height={70} 
+                        />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => `$${Number(value).toLocaleString("es-CL")}`}
+                          labelStyle={{color: "black"}}
+                        />
+                        <Bar dataKey="total" name="Ingresos" fill="#16a34a" radius={[4, 4, 0, 0]}>
+                          {salesStats.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#16a34a' : '#15803d'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* TABLA DE DATOS */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex justify-between items-center">
+                            <div className="flex items-center gap-2"><TrendingUp className="text-green-600"/> Transparencia Financiera</div>
+                            <Button variant="outline" onClick={generateAdminPDF} disabled={salesStats.length === 0}>
+                                <FileDown className="w-4 h-4 mr-2" /> Descargar Reporte Oficial
+                            </Button>
+                        </CardTitle>
+                        <CardDescription>Resumen consolidado de todas las ventas de la plataforma.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead className="text-center">Unidades</TableHead>
+                                    <TableHead className="text-right">Volumen Total</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {salesStats.map((stat, idx) => (
+                                    <TableRow key={idx}>
+                                        <TableCell>{stat.name}</TableCell>
+                                        <TableCell className="text-center">{stat.quantity}</TableCell>
+                                        <TableCell className="text-right font-mono">${stat.total.toLocaleString("es-CL")}</TableCell>
+                                    </TableRow>
+                                ))}
+                                <TableRow className="bg-muted font-bold text-lg">
+                                    <TableCell>TOTAL ACUMULADO</TableCell>
+                                    <TableCell className="text-center">{salesStats.reduce((a,b)=>a+b.quantity,0)}</TableCell>
+                                    <TableCell className="text-right text-green-700">${salesStats.reduce((a,b)=>a+b.total,0).toLocaleString("es-CL")}</TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}
